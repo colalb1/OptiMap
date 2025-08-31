@@ -45,6 +45,26 @@ jobs:
     - name: Build documentation
       run: cmake --build ${{github.workspace}}/build --target doc
 
+    # Test and Coverage (Ubuntu Debug only)
+    - name: Install lcov
+      if: matrix.os == 'ubuntu-latest' && matrix.build_type == 'Debug'
+      run: sudo apt-get update && sudo apt-get install -y lcov
+
     - name: Test
       working-directory: ${{github.workspace}}/build
       run: ctest -C ${{matrix.build_type}} --output-on-failure
+
+    - name: Generate coverage report
+      if: matrix.os == 'ubuntu-latest' && matrix.build_type == 'Debug'
+      working-directory: ${{github.workspace}}/build
+      run: |
+        lcov --capture --directory . --output-file coverage.info
+        lcov --remove coverage.info '/usr/*' --output-file coverage.info
+        lcov --list coverage.info
+
+    - name: Upload coverage to Codecov
+      if: matrix.os == 'ubuntu-latest' && matrix.build_type == 'Debug'
+      uses: codecov/codecov-action@v3
+      with:
+        files: ${{github.workspace}}/build/coverage.info
+        fail_ci_if_error: true
