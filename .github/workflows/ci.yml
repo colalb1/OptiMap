@@ -63,8 +63,6 @@ jobs:
         lcov --list coverage.info
 
     - name: Upload coverage to Codecov
-      if: matrix.os == 'ubuntu-latest' && matrix.build_type == 'Debug'
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v5
       with:
-        files: ${{github.workspace}}/build/coverage.info
-        fail_ci_if_error: true
+        token: ${{ secrets.CODECOV_TOKEN }}
