@@ -20,6 +20,19 @@ set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
 set(BENCHMARK_ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(benchmark)
 
+# Fetch GoogleTest
+FetchContent_Declare(
+  googletest
+  GIT_REPOSITORY https://github.com/google/googletest.git
+  GIT_TAG v1.14.0
+)
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
+# Debug: Print GoogleTest include directories
+message(STATUS "GoogleTest Source Dir: ${googletest_SOURCE_DIR}")
+message(STATUS "GoogleTest Binary Dir: ${googletest_BINARY_DIR}")
+
 # Add the source files
 add_executable(OptiMap
     optimap/main.cpp
@@ -36,8 +49,43 @@ target_link_libraries(OptiMapBenchmarks
     benchmark::benchmark_main
 )
 
+# Enable testing
+enable_testing()
+
+# Create test executable
+add_executable(OptiMapTests
+    tests/sample_test.cpp
+)
+
+# Link GoogleTest to tests
+target_link_libraries(OptiMapTests 
+    gtest_main 
+    gtest
+)
+
+# Add test to CTest
+add_test(NAME OptiMapTests COMMAND OptiMapTests)
+
+# Coverage configuration
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(OptiMap PRIVATE 
+        -fprofile-arcs 
+        -ftest-coverage
+    )
+    target_link_options(OptiMap PRIVATE 
+        -fprofile-arcs 
+        -ftest-coverage
+    )
+endif()
+
 target_include_directories(OptiMap PRIVATE include)
 target_include_directories(OptiMapBenchmarks PRIVATE include)
+target_include_directories(OptiMapTests PRIVATE 
+    include
+    ${googletest_SOURCE_DIR}/googletest/include
+    ${googletest_SOURCE_DIR}/googletest
+    ${googletest_BINARY_DIR}/googletest/include
+)
 
 # Clang-format
 find_program(CLANG_FORMAT_EXE NAMES clang-format)
@@ -46,6 +94,7 @@ if(CLANG_FORMAT_EXE)
         optimap/*.cpp 
         include/*.hpp 
         benchmarks/*.cpp
+        tests/*.cpp
     )
     add_custom_target(
         format
