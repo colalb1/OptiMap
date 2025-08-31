@@ -17,6 +17,20 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    # Install clang-format & clang-tidy
+    - name: Install clang tools
+      if: matrix.os == 'ubuntu-latest'  # optional: adjust for Mac/Windows
+      run: sudo apt-get update && sudo apt-get install -y clang-format clang-tidy
+
+    # Run formatting check
+    - name: Run clang-format check
+      run: clang-format --dry-run --Werror optimap/*.cpp include/*.hpp
+
+    # Run clang-tidy check
+    - name: Run clang-tidy
+      run: clang-tidy optimap/*.cpp -- -std=c++23
+
+    # Configure & build
     - name: Configure CMake
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
 
