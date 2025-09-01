@@ -54,7 +54,7 @@ enable_testing()
 
 # Create test executable
 add_executable(OptiMapTests
-    tests/sample_test.cpp, 
+    tests/sample_test.cpp
     tests/test_hashmap.cpp
 )
 
