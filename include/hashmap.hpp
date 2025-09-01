@@ -12,7 +12,7 @@ class HashMap {
 
     bool insert(const Key& key, const Value& value) {
         size_t index = Hash{}(key) % m_buckets.size();
-        
+
         for (size_t i = 0; i < m_buckets.size(); ++i) {
             size_t idx = (index + i) % m_buckets.size();
 
@@ -36,6 +36,24 @@ class HashMap {
             if (m_buckets[idx].key == key) return m_buckets[idx].value;
         }
         return std::nullopt;
+    }
+
+    bool erase(const Key& key) {
+        size_t index = Hash{}(key) % m_buckets.size();
+
+        for (size_t i = 0; i < m_buckets.size(); ++i) {
+            size_t idx = (index + i) % m_buckets.size();
+
+            if (!m_buckets[idx].occupied) return false;  // not found
+
+            if (m_buckets[idx].key == key) {
+                m_buckets[idx].occupied = false;
+                --m_size;
+
+                return true;
+            }
+        }
+        return false;  // not found
     }
 
     size_t size() const { return m_size; }
