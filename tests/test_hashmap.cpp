@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "optimap/hashmap.hpp"
+#include "hashmap.hpp"
 
 TEST(HashMapTest, InsertAndLookup) {
     optimap::HashMap<int, std::string> map;
