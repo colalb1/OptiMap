@@ -32,6 +32,7 @@ class HashMap {
         size_t index = Hash{}(key) % m_buckets.size();
         for (size_t i = 0; i < m_buckets.size(); ++i) {
             size_t idx = (index + i) % m_buckets.size();
+            
             if (!m_buckets[idx].occupied) return std::nullopt;
             if (m_buckets[idx].key == key) return m_buckets[idx].value;
         }
