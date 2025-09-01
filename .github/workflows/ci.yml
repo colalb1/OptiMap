@@ -19,7 +19,6 @@ jobs:
 
     # Install clang-format & clang-tidy
     - name: Install clang tools
-      if: matrix.os == 'ubuntu-latest'  # optional: adjust for Mac/Windows
       run: sudo apt-get update && sudo apt-get install -y clang-format clang-tidy
 
     # Run formatting check
