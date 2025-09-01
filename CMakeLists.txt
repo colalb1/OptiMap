@@ -54,13 +54,13 @@ enable_testing()
 
 # Create test executable
 add_executable(OptiMapTests
-    tests/sample_test.cpp
+    tests/sample_test.cpp, 
+    tests/test_hashmap.cpp
 )
 
 # Link GoogleTest to tests
 target_link_libraries(OptiMapTests 
-    gtest_main 
-    gtest
+    GTest::gtest_main
 )
 
 # Add test to CTest
@@ -68,24 +68,15 @@ add_test(NAME OptiMapTests COMMAND OptiMapTests)
 
 # Coverage configuration
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(OptiMap PRIVATE 
-        -fprofile-arcs 
-        -ftest-coverage
-    )
-    target_link_options(OptiMap PRIVATE 
-        -fprofile-arcs 
-        -ftest-coverage
-    )
+    foreach(target OptiMap OptiMapTests)
+        target_compile_options(${target} PRIVATE -fprofile-arcs -ftest-coverage)
+        target_link_options(${target} PRIVATE -fprofile-arcs -ftest-coverage)
+    endforeach()
 endif()
 
 target_include_directories(OptiMap PRIVATE include)
 target_include_directories(OptiMapBenchmarks PRIVATE include)
-target_include_directories(OptiMapTests PRIVATE 
-    include
-    ${googletest_SOURCE_DIR}/googletest/include
-    ${googletest_SOURCE_DIR}/googletest
-    ${googletest_BINARY_DIR}/googletest/include
-)
+target_include_directories(OptiMapTests PRIVATE include)
 
 # Clang-format
 find_program(CLANG_FORMAT_EXE NAMES clang-format)
