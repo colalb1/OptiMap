@@ -32,7 +32,7 @@ class HashMap {
             // Slot is kEmpty or kDeleted
             if (ctrl_byte < 0) {
                 // If this is first available slot, store
-                // Prefer insertion into earlies tombstone for short chain
+                // Prefer insertion into earliest tombstone for short chain
                 if (first_tombstone == -1) {
                     first_tombstone = current_idx;
                 }
