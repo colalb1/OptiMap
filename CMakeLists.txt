@@ -59,8 +59,13 @@ add_executable(OptiMapTests
 )
 
 # Link GoogleTest to tests
-target_link_libraries(OptiMapTests 
-    GTest::gtest_main
+target_link_libraries(OptiMapTests
+    gtest
+    gtest_main
+)
+
+target_include_directories(OptiMapTests PRIVATE
+    include
 )
 
 # Add test to CTest
