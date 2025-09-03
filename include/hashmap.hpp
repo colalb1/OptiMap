@@ -32,7 +32,7 @@ class HashMap {
             size_t probe_index = (index + i) & (capacity() - 1);
             int8_t ctrl_byte = m_ctrl[probe_index];
 
-            // Slot is kEmpty or kDeleted
+            // Slot is empty or deleted
             if (ctrl_byte < 0) {
                 if (!insert_slot.has_value()) {
                     insert_slot = probe_index;
@@ -51,6 +51,7 @@ class HashMap {
             m_buckets[*insert_slot] = {key, value};
             m_ctrl[*insert_slot] = hash2_val;
             m_size++;
+
             return true;
         }
 
@@ -103,8 +104,8 @@ class HashMap {
     size_t capacity() const { return m_ctrl.size(); }
 
    private:
-    // Control bytes mark the state of a slot.
-    // Negative values are special states; positive values (0-127) are h2 hashes.
+    // Control bytes mark the state of a slot
+    // Negative values are special states; positive values (0-127) are h2 hashes
     static constexpr int8_t kEmpty = -128;  // 0b10000000
     static constexpr int8_t kDeleted = -2;  // 0b11111110
 
@@ -142,7 +143,8 @@ class HashMap {
         m_size = 0;
 
         for (size_t i = 0; i < old_ctrl.size(); ++i) {
-            if (old_ctrl[i] >= 0) {  // If slot was occupied
+            // If slot was occupied
+            if (old_ctrl[i] >= 0) {
                 insert(old_buckets[i].key, old_buckets[i].value);
             }
         }
