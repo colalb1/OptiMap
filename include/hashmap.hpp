@@ -102,7 +102,7 @@ class HashMap {
 
     std::optional<Value> find(const Key& key) const {
         const auto result = find_slot(key);
-        
+
         if (result.found) {
             return m_buckets[result.index].value;
         }
@@ -116,13 +116,21 @@ class HashMap {
     }
 
     bool erase(const Key& key) {
+        // First try erasing from overflow table
+        if (m_overflow && m_overflow->erase(key)) {
+            return true;
+        }
+
         const auto result = find_slot(key);
+
         if (!result.found) {
             return false;
         }
+
         m_ctrl[result.index] = kDeleted;
         m_ctrl[result.index + capacity()] = kDeleted;  // Update sentinel
         m_size--;
+
         return true;
     }
 
