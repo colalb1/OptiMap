@@ -76,6 +76,20 @@ class HashMap {
             return false;  // Duplicate key
         }
 
+        // If probe sequence too long, move to overflow table
+        if (result.probe_distance > kGroupWidth) {
+            if (!m_overflow) {
+                m_overflow = std::make_unique<HashMap>();
+            }
+            // Mark end of the primary probe chain with overflow marker
+            m_ctrl[result.index] = kOverflow;
+            // Update sentinel
+            m_ctrl[result.index + capacity()] = kOverflow;
+
+            return m_overflow->insert(key, value);
+        }
+
+        // Else, insert into the primary table (per usual)
         const int8_t hash2_val = h2(Hash{}(key));
 
         m_buckets[result.index] = {key, value};
@@ -111,8 +125,9 @@ class HashMap {
    private:
     // Control bytes mark the state of a slot
     // Negative values are special states; positive values (0-127) are h2 hashes
-    static constexpr int8_t kEmpty = -128;  // 0b10000000
-    static constexpr int8_t kDeleted = -2;  // 0b11111110
+    static constexpr int8_t kEmpty = -128;   // 0b10000000
+    static constexpr int8_t kDeleted = -2;   // 0b11111110
+    static constexpr int8_t kOverflow = -3;  // 0b11111101
 
     struct Entry {
         Key key;
@@ -121,12 +136,13 @@ class HashMap {
     struct FindResult {
         size_t index;
         bool found;
+        size_t probe_distance;
     };
 
     FindResult find_slot(const Key& key) const {
         const size_t full_hash = Hash{}(key);
         const int8_t hash2_val = h2(full_hash);
-        
+
         size_t probe_start_index = h1(full_hash);
 
         std::optional<size_t> first_deleted_slot;
@@ -207,6 +223,7 @@ class HashMap {
     std::vector<int8_t> m_ctrl;
     std::vector<Entry> m_buckets;
     size_t m_size;
+    std::unique_ptr<HashMap> m_overflow;
 };
 
 }  // namespace optimap
