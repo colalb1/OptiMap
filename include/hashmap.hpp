@@ -215,17 +215,32 @@ class HashMap {
 
     void resize_and_rehash() {
         size_t new_capacity = (capacity() == 0) ? kGroupWidth : capacity() * 2;
+
+        // Temporarily store old data
         std::vector<int8_t> old_ctrl = std::move(m_ctrl);
         std::vector<Entry> old_buckets = std::move(m_buckets);
+        std::unique_ptr<HashMap> old_overflow = std::move(m_overflow);
 
+        // Reset and resize this map
         m_buckets.assign(new_capacity, {});
         m_ctrl.assign(new_capacity + kGroupWidth - 1, kEmpty);
         m_size = 0;
+        m_overflow = nullptr;  // Clear overflow
 
+        // Re-insert elements from the old primary table
         for (size_t i = 0; i < old_buckets.size(); ++i) {
-            // If slot occupied
+            // If slot was occupied
             if (old_ctrl[i] >= 0) {
                 insert(old_buckets[i].key, old_buckets[i].value);
+            }
+        }
+
+        // Re-insert elements from the old overflow table
+        if (old_overflow) {
+            for (size_t i = 0; i < old_overflow->capacity(); ++i) {
+                if (old_overflow->m_ctrl[i] >= 0) {
+                    insert(old_overflow->m_buckets[i].key, old_overflow->m_buckets[i].value);
+                }
             }
         }
     }
