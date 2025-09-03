@@ -155,6 +155,8 @@ class HashMap {
     };
 
     FindResult find_slot(const Key& key) const {
+#if defined(__SSE2__) || (defined(_M_X64) || defined(_M_IX86))
+        // SIMD fast path
         const size_t full_hash = Hash{}(key);
         const int8_t hash2_val = h2(full_hash);
 
@@ -194,6 +196,29 @@ class HashMap {
                 return {first_deleted_slot.value(), false, offset};
             }
         }
+#else
+        // Scalar fallback path
+        const size_t full_hash = Hash{}(key);
+        const int8_t hash2_val = h2(full_hash);
+        size_t probe_start_index = h1(full_hash);
+
+        std::optional<size_t> first_deleted_slot;
+
+        for (size_t offset = 0;; ++offset) {
+            const size_t index = (probe_start_index + offset) & (capacity() - 1);
+            const int8_t ctrl_byte = m_ctrl[index];
+
+            if (ctrl_byte == hash2_val && m_buckets[index].key == key) {
+                return {index, true, offset};
+            }
+            if (ctrl_byte == kEmpty || ctrl_byte == kOverflow) {
+                return {first_deleted_slot.value_or(index), false, offset};
+            }
+            if (!first_deleted_slot.has_value() && ctrl_byte == kDeleted) {
+                first_deleted_slot = index;
+            }
+        }
+#endif
     }
 
     static size_t next_power_of_2(size_t n) {
