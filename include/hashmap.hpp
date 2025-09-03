@@ -169,27 +169,29 @@ class HashMap {
             // Check for potential h2 matches in the group
             for (auto mask = group.match_h2(hash2_val); mask.has_next();) {
                 const size_t i = (current_index + mask.next()) & (capacity() - 1);
+
                 if (m_buckets[i].key == key) {
-                    return {i, true};
+                    return {i, true, offset};
                 }
             }
 
             // Check for an empty slot to terminate the probe
             auto empty_mask = group.match_empty_or_deleted();
 
-            // Not all slots are full/deleted
+            // Not all slots are full
             if (empty_mask.mask != 0xFFFF) {
                 for (auto mask = empty_mask; mask.has_next();) {
-                    const size_t i = (current_index + mask.next()) & (capacity() - 1);
+                    size_t bit_pos = mask.next();
+                    const size_t i = (current_index + bit_pos) & (capacity() - 1);
 
-                    if (m_ctrl[i] == kEmpty) {
-                        return {first_deleted_slot.value_or(i), false};
+                    if (m_ctrl[i] == kEmpty || m_ctrl[i] == kOverflow) {
+                        return {first_deleted_slot.value_or(i), false, offset + bit_pos};
                     }
                     if (!first_deleted_slot.has_value() && m_ctrl[i] == kDeleted) {
                         first_deleted_slot = i;
                     }
                 }
-                return {first_deleted_slot.value(), false};
+                return {first_deleted_slot.value(), false, offset};
             }
         }
     }
