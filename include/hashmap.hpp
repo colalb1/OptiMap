@@ -6,14 +6,62 @@
 #include <stdexcept>
 #include <vector>
 
+// SSE/AVX intrinsics for SIMD
+#include <immintrin.h>
+
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
 namespace optimap {
 
 template <typename Key, typename Value, typename Hash = std::hash<Key>>
 class HashMap {
+   private:
+    // A group of 16 control bytes, the size of one SSE register.
+    static constexpr size_t kGroupWidth = 16;
+
+    // Helper for iterating over matches from a SIMD bitmask.
+    struct BitMask {
+        uint32_t mask;
+        explicit BitMask(uint32_t m) : mask(m) {}
+
+        bool has_next() const { return mask != 0; }
+
+        int next() {
+#if defined(_MSC_VER)
+            unsigned long i;
+            _BitScanForward(&i, mask);
+#else
+            int i = __builtin_ctz(mask);
+#endif
+            // Clear lowest set bit
+            mask &= (mask - 1);
+            return i;
+        }
+    };
+
+    // Represents control group bytes loaded into a SIMD register
+    struct Group {
+        __m128i ctrl;
+
+        explicit Group(const int8_t* p) {
+            ctrl = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p));
+        }
+
+        // Returns a bitmask of slots matching h2
+        BitMask match_h2(int8_t hash) const {
+            return BitMask(_mm_movemask_epi8(_mm_cmpeq_epi8(ctrl, _mm_set1_epi8(hash))));
+        }
+
+        // Returns a bitmask of slots that are empty or deleted
+        BitMask match_empty_or_deleted() const { return BitMask(_mm_movemask_epi8(ctrl)); }
+    };
+
    public:
     explicit HashMap(size_t capacity = 16) : m_size(0) {
-        size_t initial_capacity = next_power_of_2(capacity);
-        m_ctrl.assign(initial_capacity, kEmpty);
+        size_t initial_capacity = next_power_of_2(capacity < kGroupWidth ? kGroupWidth : capacity);
+        m_ctrl.assign(initial_capacity + kGroupWidth - 1, kEmpty);
         m_buckets.resize(initial_capacity);
     }
 
@@ -22,86 +70,43 @@ class HashMap {
             resize_and_rehash();
         }
 
-        const size_t full_hash = Hash{}(key);
-        size_t index = h1(full_hash);
-        const int8_t hash2_val = h2(full_hash);
+        const auto result = find_slot(key);
 
-        std::optional<size_t> insert_slot;
-
-        for (size_t i = 0; i < capacity(); ++i) {
-            size_t probe_index = (index + i) & (capacity() - 1);
-            int8_t ctrl_byte = m_ctrl[probe_index];
-
-            // Slot is empty or deleted
-            if (ctrl_byte < 0) {
-                if (!insert_slot.has_value()) {
-                    insert_slot = probe_index;
-                }
-                if (ctrl_byte == kEmpty) {
-                    // Found end of probe chain, key is not a duplicate
-                    break;
-                }
-            } else if (ctrl_byte == hash2_val && m_buckets[probe_index].key == key) {
-                // Duplicate key found
-                return false;  
-            }
+        if (result.found) {
+            return false;  // Duplicate key
         }
 
-        if (insert_slot.has_value()) {
-            m_buckets[*insert_slot] = {key, value};
-            m_ctrl[*insert_slot] = hash2_val;
-            m_size++;
+        const int8_t hash2_val = h2(Hash{}(key));
 
-            return true;
-        }
+        m_buckets[result.index] = {key, value};
+        m_ctrl[result.index] = hash2_val;
+        m_ctrl[result.index + capacity()] = hash2_val;  // Update sentinel
+        m_size++;
 
-        // Should be unreachable if resizing works
-        throw std::runtime_error("HashMap is full and cannot insert.");
+        return true;
     }
 
     std::optional<Value> find(const Key& key) const {
-        const size_t full_hash = Hash{}(key);
-        size_t index = h1(full_hash);
-        const int8_t hash2_val = h2(full_hash);
-
-        for (size_t i = 0; i < capacity(); ++i) {
-            size_t probe_index = (index + i) & (capacity() - 1);
-            int8_t ctrl_byte = m_ctrl[probe_index];
-
-            // End of probe chain
-            if (ctrl_byte == kEmpty) {
-                return std::nullopt;  
-            }
-            if (ctrl_byte == hash2_val && m_buckets[probe_index].key == key) {
-                return m_buckets[probe_index].value;
-            }
+        const auto result = find_slot(key);
+        if (result.found) {
+            return m_buckets[result.index].value;
         }
         return std::nullopt;
     }
 
     bool erase(const Key& key) {
-        const size_t full_hash = Hash{}(key);
-        size_t index = h1(full_hash);
-        const int8_t hash2_val = h2(full_hash);
-
-        for (size_t i = 0; i < capacity(); ++i) {
-            size_t probe_index = (index + i) & (capacity() - 1);
-            int8_t ctrl_byte = m_ctrl[probe_index];
-
-            if (ctrl_byte == kEmpty) {
-                return false;  // End of probe chain
-            }
-            if (ctrl_byte == hash2_val && m_buckets[probe_index].key == key) {
-                m_ctrl[probe_index] = kDeleted;
-                m_size--;
-                return true;
-            }
+        const auto result = find_slot(key);
+        if (!result.found) {
+            return false;
         }
-        return false;
+        m_ctrl[result.index] = kDeleted;
+        m_ctrl[result.index + capacity()] = kDeleted;  // Update sentinel
+        m_size--;
+        return true;
     }
 
     size_t size() const { return m_size; }
-    size_t capacity() const { return m_ctrl.size(); }
+    size_t capacity() const { return m_buckets.size(); }
 
    private:
     // Control bytes mark the state of a slot
@@ -113,8 +118,50 @@ class HashMap {
         Key key;
         Value value;
     };
+    struct FindResult {
+        size_t index;
+        bool found;
+    };
 
-    // Helper methods
+    FindResult find_slot(const Key& key) const {
+        const size_t full_hash = Hash{}(key);
+        const int8_t hash2_val = h2(full_hash);
+        
+        size_t probe_start_index = h1(full_hash);
+
+        std::optional<size_t> first_deleted_slot;
+
+        for (size_t offset = 0;; offset += kGroupWidth) {
+            const size_t current_index = (probe_start_index + offset) & (capacity() - 1);
+            Group group(&m_ctrl[current_index]);
+
+            // Check for potential h2 matches in the group
+            for (auto mask = group.match_h2(hash2_val); mask.has_next();) {
+                const size_t i = (current_index + mask.next()) & (capacity() - 1);
+                if (m_buckets[i].key == key) {
+                    return {i, true};
+                }
+            }
+
+            // Check for an empty slot to terminate the probe
+            auto empty_mask = group.match_empty_or_deleted();
+
+            // Not all slots are full/deleted
+            if (empty_mask.mask != 0xFFFF) {
+                for (auto mask = empty_mask; mask.has_next();) {
+                    const size_t i = (current_index + mask.next()) & (capacity() - 1);
+
+                    if (m_ctrl[i] == kEmpty) {
+                        return {first_deleted_slot.value_or(i), false};
+                    }
+                    if (!first_deleted_slot.has_value() && m_ctrl[i] == kDeleted) {
+                        first_deleted_slot = i;
+                    }
+                }
+                return {first_deleted_slot.value(), false};
+            }
+        }
+    }
 
     static size_t next_power_of_2(size_t n) {
         if (n == 0) {
@@ -134,16 +181,16 @@ class HashMap {
     }
 
     void resize_and_rehash() {
-        size_t new_cap = (capacity() == 0) ? 16 : capacity() * 2;
+        size_t new_capacity = (capacity() == 0) ? kGroupWidth : capacity() * 2;
         std::vector<int8_t> old_ctrl = std::move(m_ctrl);
         std::vector<Entry> old_buckets = std::move(m_buckets);
 
-        m_ctrl.assign(new_cap, kEmpty);
-        m_buckets.resize(new_cap);
+        m_buckets.assign(new_capacity, {});
+        m_ctrl.assign(new_capacity + kGroupWidth - 1, kEmpty);
         m_size = 0;
 
-        for (size_t i = 0; i < old_ctrl.size(); ++i) {
-            // If slot was occupied
+        for (size_t i = 0; i < old_buckets.size(); ++i) {
+            // If slot occupied
             if (old_ctrl[i] >= 0) {
                 insert(old_buckets[i].key, old_buckets[i].value);
             }
