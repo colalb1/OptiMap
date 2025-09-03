@@ -102,9 +102,16 @@ class HashMap {
 
     std::optional<Value> find(const Key& key) const {
         const auto result = find_slot(key);
+        
         if (result.found) {
             return m_buckets[result.index].value;
         }
+
+        // If probe ends at overflow marker, search overflow table
+        if (m_ctrl[result.index] == kOverflow && m_overflow) {
+            return m_overflow->find(key);
+        }
+
         return std::nullopt;
     }
 
