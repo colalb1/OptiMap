@@ -59,6 +59,10 @@ class HashMap {
     // A group of 16 control bytes, the size of one SSE register.
     static constexpr size_t kGroupWidth = 16;
 
+    // Defines the CPU cache line size (64 bytes) for memory alignment
+    // Improves performance by preventing cache splits
+    static constexpr size_t kCacheLineSize = 64;
+
     // Control bytes mark the state of a slot
     // Negative values are special states; positive values (0-127) are h2 hashes
     static constexpr int8_t kEmpty = -128;   // 0b10000000
