@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <vector>
@@ -12,6 +13,43 @@
 #if defined(_MSC_VER)
 #include <intrin.h>
 #endif
+
+template <typename T, size_t Alignment>
+struct AlignedAllocator {
+    using value_type = T;
+    static constexpr size_t alignment = Alignment;
+
+    AlignedAllocator() = default;
+
+    template <class U>
+    constexpr AlignedAllocator(const AlignedAllocator<U, Alignment>&) noexcept {}
+
+    T* allocate(size_t n) {
+        if (n > std::numeric_limits<size_t>::max() / sizeof(T)) {
+            throw std::bad_alloc();
+        }
+#if defined(_MSC_VER)
+        void* ptr = _aligned_malloc(n * sizeof(T), alignment);
+        if (!ptr) {
+            throw std::bad_alloc();
+        }
+#else
+        void* ptr = std::aligned_alloc(alignment, n * sizeof(T));
+        if (!ptr) {
+            throw std::bad_alloc();
+        }
+#endif
+        return static_cast<T*>(ptr);
+    }
+
+    void deallocate(T* p, size_t) noexcept {
+#if defined(_MSC_VER)
+        _aligned_free(p);
+#else
+        std::free(p);
+#endif
+    }
+};
 
 namespace optimap {
 
