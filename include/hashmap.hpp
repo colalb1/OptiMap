@@ -180,6 +180,30 @@ class HashMap {
         Value value;
     };
 
+    template <bool IsConst>
+    class iterator_impl {
+        // implement
+    };
+
+    using iterator = iterator_impl<false>;
+    using const_iterator = iterator_impl<true>;
+
+    iterator begin() {
+        // implement
+    }
+
+    iterator end() {
+        // implement
+    }
+
+    const_iterator begin() const {
+        // implement
+    }
+
+    const_iterator end() const {
+        // implement
+    }
+
    private:
     // Control bytes mark the state of a slot
     // Negative values are special states; positive values (0-127) are h2 hashes
