@@ -28,7 +28,7 @@ struct AlignedAllocator {
 
     template <class U>
     constexpr AlignedAllocator(const AlignedAllocator<U, Alignment>&) noexcept {}
-    
+
     // Equality operators
     bool operator==(const AlignedAllocator&) const noexcept { return true; }
     bool operator!=(const AlignedAllocator&) const noexcept { return false; }
@@ -37,9 +37,9 @@ struct AlignedAllocator {
         if (n > std::numeric_limits<size_t>::max() / sizeof(T)) {
             throw std::bad_alloc();
         }
-        
+
         size_t bytes = n * sizeof(T);
-        
+
 #if defined(_MSC_VER)
         void* ptr = _aligned_malloc(bytes, alignment);
         if (!ptr) {
@@ -47,7 +47,7 @@ struct AlignedAllocator {
         }
 #else
         // std::aligned_alloc requires size to be a multiple of alignment
-        // Round up to the nearest multiple of alignment
+        // Round up to nearest multiple of alignment
         size_t aligned_bytes = ((bytes + alignment - 1) / alignment) * alignment;
         void* ptr = std::aligned_alloc(alignment, aligned_bytes);
         if (!ptr) {
@@ -74,10 +74,10 @@ class HashMap {
     struct Entry {
         Key key;
         Value value;
-        
+
         // Default constructor for Entry to ensure proper initialization
         Entry() = default;
-        
+
         // Constructor with key and value
         Entry(const Key& k, const Value& v) : key(k), value(v) {}
     };
@@ -230,14 +230,15 @@ class HashMap {
             size_t new_capacity = (capacity() == 0) ? kGroupWidth : capacity() * 2;
 
             // Create new vectors with increased capacity
-            std::vector<int8_t, AlignedAllocator<int8_t, kCacheLineSize>> new_ctrl(new_capacity * 2, kEmpty);
+            std::vector<int8_t, AlignedAllocator<int8_t, kCacheLineSize>> new_ctrl(new_capacity * 2,
+                                                                                   kEmpty);
             std::vector<Entry, AlignedAllocator<Entry, kCacheLineSize>> new_buckets(new_capacity);
-            
+
             // Temporarily store old data
             auto old_ctrl = std::move(m_ctrl);
             auto old_buckets = std::move(m_buckets);
             auto old_overflow = std::move(m_overflow);
-            
+
             // Assign new vectors to member variables
             m_ctrl = std::move(new_ctrl);
             m_buckets = std::move(new_buckets);
@@ -280,12 +281,12 @@ class HashMap {
     explicit HashMap(size_t capacity = 16) : m_size(0) {
         // Ensure capacity is at least kGroupWidth and a power of 2
         size_t initial_capacity = next_power_of_2(capacity < kGroupWidth ? kGroupWidth : capacity);
-        
+
         try {
             // Allocate control bytes with enough space for sentinels
             m_ctrl.resize(initial_capacity * 2);
             std::fill(m_ctrl.begin(), m_ctrl.end(), kEmpty);
-            
+
             // Allocate buckets
             m_buckets.resize(initial_capacity);
         } catch (const std::bad_alloc& e) {
@@ -312,7 +313,7 @@ class HashMap {
             }
             // Mark end of the primary probe chain with overflow marker
             m_ctrl[result.index] = kOverflow;
-            
+
             // Update sentinel if within bounds
             size_t sentinel_index = result.index + capacity();
             if (sentinel_index < m_ctrl.size()) {
@@ -327,16 +328,16 @@ class HashMap {
 
         // Create a new Entry with the key and value
         m_buckets[result.index] = Entry(key, value);
-        
+
         // Update control bytes
         m_ctrl[result.index] = hash2_val;
-        
+
         // Update sentinel if within bounds
         size_t sentinel_index = result.index + capacity();
         if (sentinel_index < m_ctrl.size()) {
             m_ctrl[sentinel_index] = hash2_val;
         }
-        
+
         m_size++;
 
         return true;
@@ -370,13 +371,13 @@ class HashMap {
         }
 
         m_ctrl[result.index] = kDeleted;
-        
+
         // Update sentinel if within bounds
         size_t sentinel_index = result.index + capacity();
         if (sentinel_index < m_ctrl.size()) {
             m_ctrl[sentinel_index] = kDeleted;
         }
-        
+
         m_size--;
 
         return true;
@@ -496,7 +497,7 @@ class HashMap {
 
         friend bool operator==(const iterator_impl& a, const iterator_impl& b) {
             if (a.m_map != b.m_map || a.m_index != b.m_index) return false;
-            
+
             // Handle pointer logic for overflow iterator
             const bool a_has_overflow = static_cast<bool>(a.m_overflow_it);
             const bool b_has_overflow = static_cast<bool>(b.m_overflow_it);
