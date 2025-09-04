@@ -19,6 +19,11 @@ struct AlignedAllocator {
     using value_type = T;
     static constexpr size_t alignment = Alignment;
 
+    template <class U>
+    struct rebind {
+        using other = AlignedAllocator<U, Alignment>;
+    };
+
     AlignedAllocator() = default;
 
     template <class U>
@@ -55,6 +60,12 @@ namespace optimap {
 
 template <typename Key, typename Value, typename Hash = std::hash<Key>>
 class HashMap {
+   public:
+    struct Entry {
+        Key key;
+        Value value;
+    };
+
    private:
     // A group of 16 control bytes, the size of one SSE register.
     static constexpr size_t kGroupWidth = 16;
@@ -226,11 +237,8 @@ class HashMap {
 
         // Re-insert elements from the old overflow table
         if (old_overflow) {
-            for (size_t i = 0; i < old_overflow->capacity(); ++i) {
-                if (old_overflow->m_ctrl[i] >= 0) {
-                    insert(std::move(old_overflow->m_buckets[i].key),
-                           std::move(old_overflow->m_buckets[i].value));
-                }
+            for (auto&& entry : *old_overflow) {
+                insert(std::move(entry.key), std::move(entry.value));
             }
         }
     }
@@ -242,8 +250,8 @@ class HashMap {
     }
 
     // Members
-    std::vector<int8_t> m_ctrl;
-    std::vector<Entry> m_buckets;
+    std::vector<int8_t, AlignedAllocator<int8_t, kCacheLineSize>> m_ctrl;
+    std::vector<Entry, AlignedAllocator<Entry, kCacheLineSize>> m_buckets;
     size_t m_size;
     std::unique_ptr<HashMap> m_overflow;
 
@@ -325,11 +333,6 @@ class HashMap {
 
     size_t size() const { return m_size; }
     size_t capacity() const { return m_buckets.size(); }
-
-    struct Entry {
-        Key key;
-        Value value;
-    };
 
     // Forward declaration
     template <bool IsConst>
