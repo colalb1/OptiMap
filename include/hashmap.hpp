@@ -7,11 +7,11 @@
 #include <stdexcept>
 #include <vector>
 
-// SSE/AVX intrinsics for SIMD
+#if defined(__SSE2__) || (defined(_M_X64) || defined(_M_IX86))
 #include <immintrin.h>
-
 #if defined(_MSC_VER)
 #include <intrin.h>
+#endif
 #endif
 
 template <typename T, size_t Alignment>
