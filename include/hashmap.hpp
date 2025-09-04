@@ -28,18 +28,28 @@ struct AlignedAllocator {
 
     template <class U>
     constexpr AlignedAllocator(const AlignedAllocator<U, Alignment>&) noexcept {}
+    
+    // Equality operators
+    bool operator==(const AlignedAllocator&) const noexcept { return true; }
+    bool operator!=(const AlignedAllocator&) const noexcept { return false; }
 
     T* allocate(size_t n) {
         if (n > std::numeric_limits<size_t>::max() / sizeof(T)) {
             throw std::bad_alloc();
         }
+        
+        size_t bytes = n * sizeof(T);
+        
 #if defined(_MSC_VER)
-        void* ptr = _aligned_malloc(n * sizeof(T), alignment);
+        void* ptr = _aligned_malloc(bytes, alignment);
         if (!ptr) {
             throw std::bad_alloc();
         }
 #else
-        void* ptr = std::aligned_alloc(alignment, n * sizeof(T));
+        // std::aligned_alloc requires size to be a multiple of alignment
+        // Round up to the nearest multiple of alignment
+        size_t aligned_bytes = ((bytes + alignment - 1) / alignment) * alignment;
+        void* ptr = std::aligned_alloc(alignment, aligned_bytes);
         if (!ptr) {
             throw std::bad_alloc();
         }
@@ -64,6 +74,12 @@ class HashMap {
     struct Entry {
         Key key;
         Value value;
+        
+        // Default constructor for Entry to ensure proper initialization
+        Entry() = default;
+        
+        // Constructor with key and value
+        Entry(const Key& k, const Value& v) : key(k), value(v) {}
     };
 
    private:
@@ -210,36 +226,41 @@ class HashMap {
     }
 
     void resize_and_rehash() {
-        size_t new_capacity = (capacity() == 0) ? kGroupWidth : capacity() * 2;
+        try {
+            size_t new_capacity = (capacity() == 0) ? kGroupWidth : capacity() * 2;
 
-        // Custom allocator
-        using CtrlVec = std::vector<int8_t, AlignedAllocator<int8_t, kCacheLineSize>>;
-        using BucketVec = std::vector<Entry, AlignedAllocator<Entry, kCacheLineSize>>;
+            // Create new vectors with increased capacity
+            std::vector<int8_t, AlignedAllocator<int8_t, kCacheLineSize>> new_ctrl(new_capacity * 2, kEmpty);
+            std::vector<Entry, AlignedAllocator<Entry, kCacheLineSize>> new_buckets(new_capacity);
+            
+            // Temporarily store old data
+            auto old_ctrl = std::move(m_ctrl);
+            auto old_buckets = std::move(m_buckets);
+            auto old_overflow = std::move(m_overflow);
+            
+            // Assign new vectors to member variables
+            m_ctrl = std::move(new_ctrl);
+            m_buckets = std::move(new_buckets);
+            m_size = 0;
+            m_overflow = nullptr;  // Clear overflow
 
-        // Temporarily store old data
-        CtrlVec old_ctrl = std::move(m_ctrl);
-        BucketVec old_buckets = std::move(m_buckets);
-        std::unique_ptr<HashMap> old_overflow = std::move(m_overflow);
-
-        // Reset and resize this map
-        m_buckets.assign(new_capacity, {});
-        m_ctrl.assign(new_capacity + kGroupWidth - 1, kEmpty);
-        m_size = 0;
-        m_overflow = nullptr;  // Clear overflow
-
-        // Re-insert elements from the old primary table
-        for (size_t i = 0; i < old_buckets.size(); ++i) {
-            // If slot was occupied
-            if (old_ctrl[i] >= 0) {
-                insert(std::move(old_buckets[i].key), std::move(old_buckets[i].value));
+            // Re-insert elements from the old primary table
+            for (size_t i = 0; i < old_buckets.size(); ++i) {
+                // If slot was occupied
+                if (old_ctrl[i] >= 0) {
+                    insert(std::move(old_buckets[i].key), std::move(old_buckets[i].value));
+                }
             }
-        }
 
-        // Re-insert elements from the old overflow table
-        if (old_overflow) {
-            for (auto&& entry : *old_overflow) {
-                insert(std::move(entry.key), std::move(entry.value));
+            // Re-insert elements from the old overflow table
+            if (old_overflow) {
+                for (auto&& entry : *old_overflow) {
+                    insert(std::move(entry.key), std::move(entry.value));
+                }
             }
+        } catch (const std::exception& e) {
+            // Handle any exceptions during resize
+            throw std::runtime_error("HashMap resize failed: " + std::string(e.what()));
         }
     }
 
@@ -257,9 +278,20 @@ class HashMap {
 
    public:
     explicit HashMap(size_t capacity = 16) : m_size(0) {
+        // Ensure capacity is at least kGroupWidth and a power of 2
         size_t initial_capacity = next_power_of_2(capacity < kGroupWidth ? kGroupWidth : capacity);
-        m_ctrl.assign(initial_capacity + kGroupWidth - 1, kEmpty);
-        m_buckets.resize(initial_capacity);
+        
+        try {
+            // Allocate control bytes with enough space for sentinels
+            m_ctrl.resize(initial_capacity * 2);
+            std::fill(m_ctrl.begin(), m_ctrl.end(), kEmpty);
+            
+            // Allocate buckets
+            m_buckets.resize(initial_capacity);
+        } catch (const std::bad_alloc& e) {
+            // Handle allocation failure
+            throw std::runtime_error("HashMap initialization failed: " + std::string(e.what()));
+        }
     }
 
     bool insert(const Key& key, const Value& value) {
@@ -280,8 +312,12 @@ class HashMap {
             }
             // Mark end of the primary probe chain with overflow marker
             m_ctrl[result.index] = kOverflow;
-            // Update sentinel
-            m_ctrl[result.index + capacity()] = kOverflow;
+            
+            // Update sentinel if within bounds
+            size_t sentinel_index = result.index + capacity();
+            if (sentinel_index < m_ctrl.size()) {
+                m_ctrl[sentinel_index] = kOverflow;
+            }
 
             return m_overflow->insert(std::move(key), std::move(value));
         }
@@ -289,9 +325,18 @@ class HashMap {
         // Else, insert into the primary table (per usual)
         const int8_t hash2_val = h2(Hash{}(key));
 
-        m_buckets[result.index] = {std::move(key), std::move(value)};
+        // Create a new Entry with the key and value
+        m_buckets[result.index] = Entry(key, value);
+        
+        // Update control bytes
         m_ctrl[result.index] = hash2_val;
-        m_ctrl[result.index + capacity()] = hash2_val;  // Update sentinel
+        
+        // Update sentinel if within bounds
+        size_t sentinel_index = result.index + capacity();
+        if (sentinel_index < m_ctrl.size()) {
+            m_ctrl[sentinel_index] = hash2_val;
+        }
+        
         m_size++;
 
         return true;
@@ -325,7 +370,13 @@ class HashMap {
         }
 
         m_ctrl[result.index] = kDeleted;
-        m_ctrl[result.index + capacity()] = kDeleted;  // Update sentinel
+        
+        // Update sentinel if within bounds
+        size_t sentinel_index = result.index + capacity();
+        if (sentinel_index < m_ctrl.size()) {
+            m_ctrl[sentinel_index] = kDeleted;
+        }
+        
         m_size--;
 
         return true;
