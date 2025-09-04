@@ -175,6 +175,11 @@ class HashMap {
     size_t size() const { return m_size; }
     size_t capacity() const { return m_buckets.size(); }
 
+    struct Entry {
+        Key key;
+        Value value;
+    };
+
    private:
     // Control bytes mark the state of a slot
     // Negative values are special states; positive values (0-127) are h2 hashes
@@ -182,10 +187,6 @@ class HashMap {
     static constexpr int8_t kDeleted = -2;   // 0b11111110
     static constexpr int8_t kOverflow = -3;  // 0b11111101
 
-    struct Entry {
-        Key key;
-        Value value;
-    };
     struct FindResult {
         size_t index;
         bool found;
