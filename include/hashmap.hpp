@@ -373,28 +373,49 @@ class HashMap {
         using reference = std::conditional_t<IsConst, const Entry&, Entry&>;
         using pointer = std::conditional_t<IsConst, const Entry*, Entry*>;
 
-        // Overflow map
-        using overflow_iterator =
-            std::optional<std::conditional_t<IsConst, typename HashMap::const_iterator,
-                                             typename HashMap::iterator>>;
+        // Use unique_ptr to break the recursive dependency
+        using iterator_type = std::conditional_t<IsConst, typename HashMap::const_iterator,
+                                                 typename HashMap::iterator>;
+        using overflow_iterator = std::unique_ptr<iterator_type>;
 
         iterator_impl() : m_map(nullptr), m_index(0) {}
         iterator_impl(map_ptr map, size_t index) : m_map(map), m_index(index) {}
 
+        // Copy constructor needed for unique_ptr member
+        iterator_impl(const iterator_impl& other) : m_map(other.m_map), m_index(other.m_index) {
+            if (other.m_overflow_it) {
+                m_overflow_it = std::make_unique<iterator_type>(*other.m_overflow_it);
+            }
+        }
+
+        // Copy assignment
+        iterator_impl& operator=(const iterator_impl& other) {
+            if (this != &other) {
+                m_map = other.m_map;
+                m_index = other.m_index;
+                if (other.m_overflow_it) {
+                    m_overflow_it = std::make_unique<iterator_type>(*other.m_overflow_it);
+                } else {
+                    m_overflow_it.reset();
+                }
+            }
+            return *this;
+        }
+
         // Mutable iterator converted to const_iterator
         operator iterator_impl<true>() const {
             iterator_impl<true> const_it(m_map, m_index);
-
-            if (m_overflow_it.has_value()) {
-                const_it.m_overflow_it = *m_overflow_it;
+            if (m_overflow_it) {
+                const_it.m_overflow_it =
+                    std::make_unique<typename HashMap::const_iterator>(*m_overflow_it);
             }
 
             return const_it;
         }
 
         reference operator*() const {
-            // Dereference overflow iterator if active else use the primary table index
-            if (m_overflow_it.has_value()) {
+            // Dereference the unique_ptr first, then the iterator
+            if (m_overflow_it) {
                 return **m_overflow_it;
             }
 
@@ -405,7 +426,7 @@ class HashMap {
 
         iterator_impl& operator++() {
             // Advance active iterator
-            if (m_overflow_it.has_value()) {
+            if (m_overflow_it) {
                 ++(*m_overflow_it);
             } else {
                 m_index++;
@@ -423,8 +444,16 @@ class HashMap {
         }
 
         friend bool operator==(const iterator_impl& a, const iterator_impl& b) {
-            return a.m_map == b.m_map && a.m_index == b.m_index &&
-                   a.m_overflow_it == b.m_overflow_it;
+            if (a.m_map != b.m_map || a.m_index != b.m_index) return false;
+            
+            // Handle pointer logic for overflow iterator
+            const bool a_has_overflow = static_cast<bool>(a.m_overflow_it);
+            const bool b_has_overflow = static_cast<bool>(b.m_overflow_it);
+
+            if (a_has_overflow != b_has_overflow) return false;
+            if (!a_has_overflow) return true;  // Both null
+
+            return *a.m_overflow_it == *b.m_overflow_it;
         }
 
         friend bool operator!=(const iterator_impl& a, const iterator_impl& b) { return !(a == b); }
@@ -432,7 +461,7 @@ class HashMap {
        private:
         friend class HashMap;
         void find_next_valid() {
-            if (m_overflow_it.has_value()) {
+            if (m_overflow_it) {
                 // If the overflow iterator is at end \then done
                 if (*m_overflow_it == m_map->m_overflow->end()) {
                     m_index = m_map->capacity();
@@ -451,8 +480,8 @@ class HashMap {
 
             // Finished with primary map, transition to overflow if it exists
             if (m_map->m_overflow) {
-                m_overflow_it = m_map->m_overflow->begin();
-                find_next_valid();  // Check if overflow is empty
+                m_overflow_it = std::make_unique<iterator_type>(m_map->m_overflow->begin());
+                find_next_valid();
             }
         }
 
