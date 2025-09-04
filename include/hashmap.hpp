@@ -180,29 +180,131 @@ class HashMap {
         Value value;
     };
 
+    // Forward declaration
     template <bool IsConst>
-    class iterator_impl {
-        // implement
-    };
+    class iterator_impl;
 
+    // Aliases
     using iterator = iterator_impl<false>;
     using const_iterator = iterator_impl<true>;
 
     iterator begin() {
-        // implement
+        iterator it(this, 0);
+
+        // To first valid elt
+        it.find_next_valid();
+        return it;
     }
 
-    iterator end() {
-        // implement
-    }
+    iterator end() { return iterator(this, capacity()); }
 
     const_iterator begin() const {
-        // implement
+        const_iterator it(this, 0);
+
+        // To first valid elt
+        it.find_next_valid();
+        return it;
     }
 
-    const_iterator end() const {
-        // implement
-    }
+    const_iterator end() const { return const_iterator(this, capacity()); }
+    const_iterator cbegin() const { return begin(); }
+    const_iterator cend() const { return end(); }
+
+    // For mutable and constant iterators
+    template <bool IsConst>
+    class iterator_impl {
+       public:
+        // Conditional types based on constant status
+        using map_ptr = std::conditional_t<IsConst, const HashMap*, HashMap*>;
+        using reference = std::conditional_t<IsConst, const Entry&, Entry&>;
+        using pointer = std::conditional_t<IsConst, const Entry*, Entry*>;
+
+        // Overflow map
+        using overflow_iterator =
+            std::optional<std::conditional_t<IsConst, typename HashMap::const_iterator,
+                                             typename HashMap::iterator>>;
+
+        iterator_impl() : m_map(nullptr), m_index(0) {}
+        iterator_impl(map_ptr map, size_t index) : m_map(map), m_index(index) {}
+
+        // Mutable iterator converted to const_iterator
+        operator iterator_impl<true>() const {
+            iterator_impl<true> const_it(m_map, m_index);
+
+            if (m_overflow_it.has_value()) {
+                const_it.m_overflow_it = *m_overflow_it;
+            }
+
+            return const_it;
+        }
+
+        reference operator*() const {
+            // Dereference overflow iterator if active else use the primary table index
+            if (m_overflow_it.has_value()) {
+                return **m_overflow_it;
+            }
+
+            return m_map->m_buckets[m_index];
+        }
+
+        pointer operator->() const { return &operator*(); }
+
+        iterator_impl& operator++() {
+            // Advance active iterator
+            if (m_overflow_it.has_value()) {
+                ++(*m_overflow_it);
+            } else {
+                m_index++;
+            }
+
+            // Skip empty & deleted slots
+            find_next_valid();
+            return *this;
+        }
+
+        iterator_impl operator++(int) {
+            iterator_impl tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        friend bool operator==(const iterator_impl& a, const iterator_impl& b) {
+            return a.m_map == b.m_map && a.m_index == b.m_index &&
+                   a.m_overflow_it == b.m_overflow_it;
+        }
+
+        friend bool operator!=(const iterator_impl& a, const iterator_impl& b) { return !(a == b); }
+
+       private:
+        friend class HashMap;
+        void find_next_valid() {
+            if (m_overflow_it.has_value()) {
+                // If the overflow iterator is at its end, we are done
+                if (*m_overflow_it == m_map->m_overflow->end()) {
+                    m_index = m_map->capacity();
+                    m_overflow_it.reset();
+                }
+                return;
+            }
+
+            while (m_index < m_map->capacity()) {
+                if (m_map->m_ctrl[m_index] >= 0) {
+                    return;  // Found a valid slot
+                }
+                m_index++;
+            }
+
+            // Finished with primary map, transition to overflow if it exists
+            if (m_map->m_overflow) {
+                m_overflow_it = m_map->m_overflow->begin();
+                find_next_valid();  // Check if overflow is empty
+            }
+        }
+
+        map_ptr m_map;
+        size_t m_index;
+        overflow_iterator m_overflow_it;
+    };
 
    private:
     // Control bytes mark the state of a slot
