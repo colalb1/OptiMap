@@ -124,13 +124,13 @@ class HashMap {
             // Update sentinel
             m_ctrl[result.index + capacity()] = kOverflow;
 
-            return m_overflow->insert(key, value);
+            return m_overflow->insert(std::move(key), std::move(value));
         }
 
         // Else, insert into the primary table (per usual)
         const int8_t hash2_val = h2(Hash{}(key));
 
-        m_buckets[result.index] = {key, value};
+        m_buckets[result.index] = {std::move(key), std::move(value)};
         m_ctrl[result.index] = hash2_val;
         m_ctrl[result.index + capacity()] = hash2_val;  // Update sentinel
         m_size++;
@@ -279,9 +279,13 @@ class HashMap {
     void resize_and_rehash() {
         size_t new_capacity = (capacity() == 0) ? kGroupWidth : capacity() * 2;
 
+        // Custom allocator
+        using CtrlVec = std::vector<int8_t, AlignedAllocator<int8_t, kCacheLineSize>>;
+        using BucketVec = std::vector<Entry, AlignedAllocator<Entry, kCacheLineSize>>;
+
         // Temporarily store old data
-        std::vector<int8_t> old_ctrl = std::move(m_ctrl);
-        std::vector<Entry> old_buckets = std::move(m_buckets);
+        CtrlVec old_ctrl = std::move(m_ctrl);
+        BucketVec old_buckets = std::move(m_buckets);
         std::unique_ptr<HashMap> old_overflow = std::move(m_overflow);
 
         // Reset and resize this map
@@ -294,7 +298,7 @@ class HashMap {
         for (size_t i = 0; i < old_buckets.size(); ++i) {
             // If slot was occupied
             if (old_ctrl[i] >= 0) {
-                insert(old_buckets[i].key, old_buckets[i].value);
+                insert(std::move(old_buckets[i].key), std::move(old_buckets[i].value));
             }
         }
 
@@ -302,7 +306,8 @@ class HashMap {
         if (old_overflow) {
             for (size_t i = 0; i < old_overflow->capacity(); ++i) {
                 if (old_overflow->m_ctrl[i] >= 0) {
-                    insert(old_overflow->m_buckets[i].key, old_overflow->m_buckets[i].value);
+                    insert(std::move(old_overflow->m_buckets[i].key),
+                           std::move(old_overflow->m_buckets[i].value));
                 }
             }
         }
