@@ -279,7 +279,7 @@ class HashMap {
         friend class HashMap;
         void find_next_valid() {
             if (m_overflow_it.has_value()) {
-                // If the overflow iterator is at its end, we are done
+                // If the overflow iterator is at end \then done
                 if (*m_overflow_it == m_map->m_overflow->end()) {
                     m_index = m_map->capacity();
                     m_overflow_it.reset();
@@ -287,6 +287,7 @@ class HashMap {
                 return;
             }
 
+            // Search primary table for next occupied slot where ctrl byte >= 0
             while (m_index < m_map->capacity()) {
                 if (m_map->m_ctrl[m_index] >= 0) {
                     return;  // Found a valid slot
@@ -301,9 +302,9 @@ class HashMap {
             }
         }
 
-        map_ptr m_map;
-        size_t m_index;
-        overflow_iterator m_overflow_it;
+        map_ptr m_map;                    // Pointer to map being iterated
+        size_t m_index;                   // Current index in primary bucket vector
+        overflow_iterator m_overflow_it;  // Iterator for overflow map
     };
 
    private:
