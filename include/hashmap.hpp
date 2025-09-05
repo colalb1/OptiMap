@@ -321,8 +321,24 @@ class HashMap {
         return *this;
     }
 
-    HashMap(HashMap&& other) noexcept = default;
-    HashMap& operator=(HashMap&& other) noexcept = default;
+    HashMap(HashMap&& other) noexcept
+        : m_ctrl(std::move(other.m_ctrl)),
+          m_buckets(std::move(other.m_buckets)),
+          m_size(other.m_size),
+          m_overflow(std::move(other.m_overflow)) {
+        other.m_size = 0;
+    }
+
+    HashMap& operator=(HashMap&& other) noexcept {
+        if (this != &other) {
+            m_ctrl = std::move(other.m_ctrl);
+            m_buckets = std::move(other.m_buckets);
+            m_size = other.m_size;
+            m_overflow = std::move(other.m_overflow);
+            other.m_size = 0;
+        }
+        return *this;
+    }
 
     template <typename K, typename V>
     bool emplace(K&& key, V&& value) {
