@@ -15,19 +15,19 @@ TEST(HashMapTest, InsertAndFind) {
     EXPECT_EQ(map.size(), 2);
 
     auto val1 = map.find(1);
-    ASSERT_TRUE(val1.has_value());
-    EXPECT_EQ(val1.value(), "one");
+    ASSERT_NE(val1, nullptr);
+    EXPECT_EQ(*val1, "one");
 
     auto val2 = map.find(2);
-    ASSERT_TRUE(val2.has_value());
-    EXPECT_EQ(val2.value(), "two");
+    ASSERT_NE(val2, nullptr);
+    EXPECT_EQ(*val2, "two");
 }
 
 TEST(HashMapTest, FindNonExistent) {
     optimap::HashMap<int, std::string> map;
     map.insert(1, "one");
     auto val = map.find(3);
-    EXPECT_FALSE(val.has_value());
+    EXPECT_EQ(val, nullptr);
 }
 
 TEST(HashMapTest, InsertDuplicate) {
@@ -37,8 +37,8 @@ TEST(HashMapTest, InsertDuplicate) {
     EXPECT_EQ(map.size(), 1);
 
     auto val = map.find(1);
-    ASSERT_TRUE(val.has_value());
-    EXPECT_EQ(val.value(), "one");  // Value should not be updated
+    ASSERT_NE(val, nullptr);
+    EXPECT_EQ(*val, "one");  // Value should not be updated
 }
 
 TEST(HashMapTest, Erase) {
@@ -49,8 +49,8 @@ TEST(HashMapTest, Erase) {
 
     EXPECT_TRUE(map.erase(1));
     EXPECT_EQ(map.size(), 1);
-    EXPECT_FALSE(map.find(1).has_value());
-    ASSERT_TRUE(map.find(2).has_value());  // Make sure other keys are unaffected
+    EXPECT_EQ(map.find(1), nullptr);
+    ASSERT_NE(map.find(2), nullptr);  // Make sure other keys are unaffected
 
     EXPECT_FALSE(map.erase(1));  // Erasing again should fail
     EXPECT_EQ(map.size(), 1);
@@ -62,15 +62,15 @@ TEST(HashMapTest, StringKeys) {
     EXPECT_TRUE(map.insert("beta", 2));
 
     auto val = map.find("alpha");
-    ASSERT_TRUE(val.has_value());
-    EXPECT_EQ(val.value(), 1);
-    EXPECT_FALSE(map.find("gamma").has_value());
+    ASSERT_NE(val, nullptr);
+    EXPECT_EQ(*val, 1);
+    EXPECT_EQ(map.find("gamma"), nullptr);
 }
 
 TEST(HashMapTest, EmptyMapOperations) {
     optimap::HashMap<int, int> map;
     EXPECT_EQ(map.size(), 0);
-    EXPECT_FALSE(map.find(100).has_value());
+    EXPECT_EQ(map.find(100), nullptr);
     EXPECT_FALSE(map.erase(100));
 }
 
@@ -90,8 +90,8 @@ TEST(ResizeTest, TriggerResize) {
     // Verify all old elements are still present
     for (int i = 0; i < 14; ++i) {
         auto val = map.find(i);
-        ASSERT_TRUE(val.has_value());
-        EXPECT_EQ(val.value(), i * 10);
+        ASSERT_NE(val, nullptr);
+        EXPECT_EQ(*val, i * 10);
     }
 }
 
@@ -106,8 +106,8 @@ TEST(ResizeTest, InsertMany) {
     EXPECT_EQ(map.size(), num_elements);
     for (int i = 0; i < num_elements; ++i) {
         auto val = map.find(i);
-        ASSERT_TRUE(val.has_value());
-        EXPECT_EQ(val.value(), i);
+        ASSERT_NE(val, nullptr);
+        EXPECT_EQ(*val, i);
     }
 }
 
@@ -128,14 +128,17 @@ TEST(CollisionTest, InsertAndFindWithCollisions) {
 
     EXPECT_EQ(map.size(), 3);
 
-    ASSERT_TRUE(map.find(1).has_value());
-    EXPECT_EQ(map.find(1).value(), "one");
+    auto val1 = map.find(1);
+    ASSERT_NE(val1, nullptr);
+    EXPECT_EQ(*val1, "one");
 
-    ASSERT_TRUE(map.find(17).has_value());
-    EXPECT_EQ(map.find(17).value(), "seventeen");
+    auto val17 = map.find(17);
+    ASSERT_NE(val17, nullptr);
+    EXPECT_EQ(*val17, "seventeen");
 
-    ASSERT_TRUE(map.find(33).has_value());
-    EXPECT_EQ(map.find(33).value(), "thirty-three");
+    auto val33 = map.find(33);
+    ASSERT_NE(val33, nullptr);
+    EXPECT_EQ(*val33, "thirty-three");
 }
 
 TEST(CollisionTest, EraseWithCollisions) {
@@ -149,11 +152,13 @@ TEST(CollisionTest, EraseWithCollisions) {
     EXPECT_EQ(map.size(), 2);
 
     // The others should still be findable
-    ASSERT_TRUE(map.find(1).has_value());
-    EXPECT_EQ(map.find(1).value(), "one");
+    auto val1 = map.find(1);
+    ASSERT_NE(val1, nullptr);
+    EXPECT_EQ(*val1, "one");
 
-    ASSERT_TRUE(map.find(33).has_value());
-    EXPECT_EQ(map.find(33).value(), "thirty-three");
+    auto val33 = map.find(33);
+    ASSERT_NE(val33, nullptr);
+    EXPECT_EQ(*val33, "thirty-three");
 }
 
 // A hash function to force a long probe chain and trigger the overflow mechanism
@@ -180,8 +185,8 @@ TEST(OverflowTest, InsertIntoOverflow) {
     // Check that all elements are findable
     for (int i = 0; i < 17; ++i) {
         auto val = map.find(i);
-        ASSERT_TRUE(val.has_value()) << "Failed to find key " << i;
-        EXPECT_EQ(val.value(), i * 10);
+        ASSERT_NE(val, nullptr) << "Failed to find key " << i;
+        EXPECT_EQ(*val, i * 10);
     }
 }
 
@@ -195,11 +200,12 @@ TEST(OverflowTest, EraseFromOverflow) {
     // Erase an element that is in the overflow table
     EXPECT_TRUE(map.erase(17));
     EXPECT_EQ(map.size(), 17);
-    EXPECT_FALSE(map.find(17).has_value());
+    EXPECT_EQ(map.find(17), nullptr);
 
     // Make sure another overflow element is still there
-    ASSERT_TRUE(map.find(16).has_value());
-    EXPECT_EQ(map.find(16).value(), 16);
+    auto val16 = map.find(16);
+    ASSERT_NE(val16, nullptr);
+    EXPECT_EQ(*val16, 16);
 }
 
 TEST(OverflowTest, ResizeWithOverflow) {
@@ -217,10 +223,11 @@ TEST(OverflowTest, ResizeWithOverflow) {
 
     // All 21 elements should be present
     for (int i = 0; i < 20; ++i) {
-        ASSERT_TRUE(map.find(i).has_value());
-        EXPECT_EQ(map.find(i).value(), i);
+        auto val = map.find(i);
+        ASSERT_NE(val, nullptr);
+        EXPECT_EQ(*val, i);
     }
-    ASSERT_TRUE(map.find(100).has_value());
+    ASSERT_NE(map.find(100), nullptr);
 }
 
 // Iterator tests
@@ -289,4 +296,96 @@ TEST(IteratorTest, IterationWithOverflow) {
 
     EXPECT_EQ(found_keys.size(), 18);
     EXPECT_EQ(found_keys, expected_keys);
+}
+
+// Rule of 5 and Move Semantics Tests
+TEST(LifecycleTest, CopyConstructor) {
+    optimap::HashMap<int, std::string, LongProbeHash> map1(16);
+    for (int i = 0; i < 20; ++i) {
+        map1.insert(i, "value" + std::to_string(i));
+    }
+
+    optimap::HashMap<int, std::string, LongProbeHash> map2 = map1;
+
+    EXPECT_EQ(map1.size(), map2.size());
+    for (int i = 0; i < 20; ++i) {
+        auto val1 = map1.find(i);
+        auto val2 = map2.find(i);
+        ASSERT_NE(val1, nullptr);
+        ASSERT_NE(val2, nullptr);
+        EXPECT_EQ(*val1, *val2);
+    }
+
+    // Ensure it's a deep copy by modifying one
+    map2.insert(100, "new");
+    EXPECT_NE(map1.size(), map2.size());
+    EXPECT_EQ(map1.find(100), nullptr);
+}
+
+TEST(LifecycleTest, CopyAssignment) {
+    optimap::HashMap<int, int> map1;
+    map1.insert(1, 10);
+    map1.insert(2, 20);
+
+    optimap::HashMap<int, int> map2;
+    map2.insert(3, 30);
+    map2 = map1;
+
+    EXPECT_EQ(map1.size(), map2.size());
+    EXPECT_NE(map2.find(1), nullptr);
+    EXPECT_EQ(map2.find(3), nullptr);
+}
+
+TEST(LifecycleTest, MoveConstructor) {
+    optimap::HashMap<int, int> map1;
+    map1.insert(1, 1);
+    optimap::HashMap<int, int> map2 = std::move(map1);
+
+    EXPECT_NE(map2.find(1), nullptr);
+    // It's hard to assert the state of map1 other than it should be valid.
+    // Let's just check if it's empty, which is a common state after move.
+    EXPECT_EQ(map1.size(), 0);
+}
+
+TEST(LifecycleTest, MoveAssignment) {
+    optimap::HashMap<int, int> map1;
+    map1.insert(1, 1);
+    optimap::HashMap<int, int> map2;
+    map2.insert(2, 2);
+    map2 = std::move(map1);
+
+    EXPECT_NE(map2.find(1), nullptr);
+    EXPECT_EQ(map2.find(2), nullptr);
+    EXPECT_EQ(map1.size(), 0);
+}
+
+// Test with move-only types
+struct MoveOnly {
+    int val;
+    explicit MoveOnly(int v = 0) : val(v) {}
+    MoveOnly(const MoveOnly&) = delete;
+    MoveOnly& operator=(const MoveOnly&) = delete;
+    MoveOnly(MoveOnly&&) = default;
+    MoveOnly& operator=(MoveOnly&&) = default;
+
+    // Need operator== for tests to work
+    bool operator==(const MoveOnly& other) const { return val == other.val; }
+};
+
+// Hash specialization for MoveOnly
+namespace std {
+template <>
+struct hash<MoveOnly> {
+    size_t operator()(const MoveOnly& m) const { return std::hash<int>()(m.val); }
+};
+}  // namespace std
+
+TEST(MoveSemanticsTest, MoveOnlyValue) {
+    optimap::HashMap<int, MoveOnly> map;
+    map.insert(1, MoveOnly(100));
+    map.emplace(2, MoveOnly(200));
+
+    auto val = map.find(1);
+    ASSERT_NE(val, nullptr);
+    EXPECT_EQ(val->val, 100);
 }
