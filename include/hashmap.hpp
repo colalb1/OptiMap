@@ -320,7 +320,11 @@ class HashMap {
                 m_ctrl[sentinel_index] = kOverflow;
             }
 
-            return m_overflow->insert(std::move(key), std::move(value));
+            bool was_inserted = m_overflow->insert(key, value);
+            if (was_inserted) {
+                m_size++;
+            }
+            return was_inserted;
         }
 
         // Else, insert into the primary table (per usual)
@@ -361,6 +365,7 @@ class HashMap {
     bool erase(const Key& key) {
         // First try erasing from overflow table
         if (m_overflow && m_overflow->erase(key)) {
+            m_size--;
             return true;
         }
 
