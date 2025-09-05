@@ -79,7 +79,8 @@ class HashMap {
         Entry() = default;
 
         // Constructor with key and value
-        Entry(const Key& k, const Value& v) : key(k), value(v) {}
+        template <typename K, typename V>
+        Entry(K&& k, V&& v) : key(std::forward<K>(k)), value(std::forward<V>(v)) {}
     };
 
    private:
@@ -295,7 +296,36 @@ class HashMap {
         }
     }
 
-    bool insert(const Key& key, const Value& value) {
+    // Copy/move constructors and assignment operators
+    HashMap(const HashMap& other)
+        : m_ctrl(other.m_ctrl),
+          m_buckets(other.m_buckets),
+          m_size(other.m_size),
+          m_overflow(nullptr) {
+        if (other.m_overflow) {
+            m_overflow = std::make_unique<HashMap>(*other.m_overflow);
+        }
+    }
+
+    HashMap& operator=(const HashMap& other) {
+        if (this != &other) {
+            m_ctrl = other.m_ctrl;
+            m_buckets = other.m_buckets;
+            m_size = other.m_size;
+            if (other.m_overflow) {
+                m_overflow = std::make_unique<HashMap>(*other.m_overflow);
+            } else {
+                m_overflow.reset();
+            }
+        }
+        return *this;
+    }
+
+    HashMap(HashMap&& other) noexcept = default;
+    HashMap& operator=(HashMap&& other) noexcept = default;
+
+    template <typename K, typename V>
+    bool emplace(K&& key, V&& value) {
         if (m_size >= capacity() * 0.875) {
             resize_and_rehash();
         }
@@ -320,7 +350,7 @@ class HashMap {
                 m_ctrl[sentinel_index] = kOverflow;
             }
 
-            bool was_inserted = m_overflow->insert(key, value);
+            bool was_inserted = m_overflow->emplace(std::forward<K>(key), std::forward<V>(value));
             if (was_inserted) {
                 m_size++;
             }
@@ -331,7 +361,7 @@ class HashMap {
         const int8_t hash2_val = h2(Hash{}(key));
 
         // Create a new Entry with the key and value
-        m_buckets[result.index] = Entry(key, value);
+        m_buckets[result.index] = Entry(std::forward<K>(key), std::forward<V>(value));
 
         // Update control bytes
         m_ctrl[result.index] = hash2_val;
@@ -347,11 +377,16 @@ class HashMap {
         return true;
     }
 
-    std::optional<Value> find(const Key& key) const {
+    bool insert(const Key& key, const Value& value) { return emplace(key, value); }
+
+    // Overload for r-values to enable move semantics
+    bool insert(Key&& key, Value&& value) { return emplace(std::move(key), std::move(value)); }
+
+    Value* find(const Key& key) {
         const auto result = find_slot(key);
 
         if (result.found) {
-            return m_buckets[result.index].value;
+            return &m_buckets[result.index].value;
         }
 
         // If probe ends at overflow marker, search overflow table
@@ -359,7 +394,22 @@ class HashMap {
             return m_overflow->find(key);
         }
 
-        return std::nullopt;
+        return nullptr;
+    }
+
+    const Value* find(const Key& key) const {
+        const auto result = find_slot(key);
+
+        if (result.found) {
+            return &m_buckets[result.index].value;
+        }
+
+        // If probe ends at overflow marker, search overflow table
+        if (m_ctrl[result.index] == kOverflow && m_overflow) {
+            return m_overflow->find(key);
+        }
+
+        return nullptr;
     }
 
     bool erase(const Key& key) {
