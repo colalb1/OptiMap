@@ -10,7 +10,7 @@ cd ..
 mkdir -p benchmark_results
 
 # Run the benchmarks for each key count and save the results to a CSV file
-for i in {1..14}
+for i in {1..5}
 do
     ./build/OptiMapBenchmarks --benchmark_out=benchmark_results/results_200000_$i.csv --benchmark_out_format=csv --benchmark_filter=200000
     echo "Finished 200,000 iteration: " $i
