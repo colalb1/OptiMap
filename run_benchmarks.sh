@@ -20,10 +20,6 @@ do
     echo "Finished 2,000,000 iteration: " $i
     sync
     sudo purge
-    ./build/OptiMapBenchmarks --benchmark_out=benchmark_results/results_20000000_$i.csv --benchmark_out_format=csv --benchmark_filter=20000000
-    echo "Finished 20,000,000 iteration: " $i
-    sync
-    sudo purge
 done
 
 # Generate the plots
