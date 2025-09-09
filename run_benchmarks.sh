@@ -19,6 +19,7 @@ do
     ./build/OptiMapBenchmarks --benchmark_out=benchmark_results/results_others_$i.csv --benchmark_out_format=csv --benchmark_filter="Erase|Replace|Lookup|Iterate"
     sync
     sudo purge
+    echo "Completed iteration $i"
 done
 
 # Generate the plots
