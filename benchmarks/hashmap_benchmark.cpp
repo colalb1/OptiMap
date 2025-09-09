@@ -72,8 +72,14 @@ public:
 BENCHMARK_DEFINE_F(Int32Int32Fixture, OptiMap_Insert)(benchmark::State& state) {
     for (auto _ : state) {
         optimap::HashMap<uint32_t, uint32_t, Murmur3_32> map;
-        for (uint32_t key : keys) {
-            map.insert(key, key);
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < state.range(0); ++i) {
+            map.insert(keys[i], keys[i]);
+            if (i % 1000 == 0) {
+                auto end = std::chrono::high_resolution_clock::now();
+                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
+                state.SetIterationTime(elapsed_seconds.count());
+            }
         }
     }
 }
@@ -82,8 +88,14 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, StdUnorderedMap_Insert)(benchmark::State& 
     for (auto _ : state) {
         std::unordered_map<uint32_t, uint32_t, Murmur3_32> map;
         map.max_load_factor(0.875);
-        for (uint32_t key : keys) {
-            map.insert({key, key});
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < state.range(0); ++i) {
+            map.insert({keys[i], keys[i]});
+            if (i % 1000 == 0) {
+                auto end = std::chrono::high_resolution_clock::now();
+                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
+                state.SetIterationTime(elapsed_seconds.count());
+            }
         }
     }
 }
@@ -92,8 +104,14 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, AbslFlatHashMap_Insert)(benchmark::State& 
     for (auto _ : state) {
         absl::flat_hash_map<uint32_t, uint32_t, Murmur3_32> map;
         map.max_load_factor(0.875);
-        for (uint32_t key : keys) {
-            map.insert({key, key});
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < state.range(0); ++i) {
+            map.insert({keys[i], keys[i]});
+            if (i % 1000 == 0) {
+                auto end = std::chrono::high_resolution_clock::now();
+                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
+                state.SetIterationTime(elapsed_seconds.count());
+            }
         }
     }
 }
@@ -254,7 +272,7 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, OptiMap_LookupExisting)(benchmark::State& 
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(keys[i]));
+            map.find(keys[i]);
         }
     }
 }
@@ -267,7 +285,7 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, StdUnorderedMap_LookupExisting)(benchmark:
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(keys[i]));
+            map.find(keys[i]);
         }
     }
 }
@@ -280,7 +298,7 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, AbslFlatHashMap_LookupExisting)(benchmark:
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(keys[i]));
+            map.find(keys[i]);
         }
     }
 }
@@ -297,7 +315,7 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, OptiMap_LookupNonExisting)(benchmark::Stat
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(non_existing_keys[i]));
+            map.find(non_existing_keys[i]);
         }
     }
 }
@@ -310,7 +328,7 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, StdUnorderedMap_LookupNonExisting)(benchma
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(non_existing_keys[i]));
+            map.find(non_existing_keys[i]);
         }
     }
 }
@@ -323,7 +341,7 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, AbslFlatHashMap_LookupNonExisting)(benchma
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(non_existing_keys[i]));
+            map.find(non_existing_keys[i]);
         }
     }
 }
@@ -340,8 +358,7 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, OptiMap_Iterate)(benchmark::State& state) 
     }
     for (auto _ : state) {
         for (int i = 0; i < 5000; ++i) {
-            auto value = map.find(keys[i]);
-            benchmark::DoNotOptimize(value);
+            map.find(keys[i]);
         }
     }
 }
@@ -354,8 +371,7 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, StdUnorderedMap_Iterate)(benchmark::State&
     }
     for (auto _ : state) {
         for (int i = 0; i < 5000; ++i) {
-            auto it = map.find(keys[i]);
-            benchmark::DoNotOptimize(it);
+            map.find(keys[i]);
         }
     }
 }
@@ -368,8 +384,7 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, AbslFlatHashMap_Iterate)(benchmark::State&
     }
     for (auto _ : state) {
         for (int i = 0; i < 5000; ++i) {
-            auto it = map.find(keys[i]);
-            benchmark::DoNotOptimize(it);
+            map.find(keys[i]);
         }
     }
 }
@@ -404,8 +419,14 @@ public:
 BENCHMARK_DEFINE_F(Int64Value448Fixture, OptiMap_Insert)(benchmark::State& state) {
     for (auto _ : state) {
         optimap::HashMap<uint64_t, Value448, Murmur3_64> map;
-        for (uint64_t key : keys) {
-            map.insert(key, Value448{});
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < state.range(0); ++i) {
+            map.insert(keys[i], Value448{});
+            if (i % 1000 == 0) {
+                auto end = std::chrono::high_resolution_clock::now();
+                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
+                state.SetIterationTime(elapsed_seconds.count());
+            }
         }
     }
 }
@@ -414,8 +435,14 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, StdUnorderedMap_Insert)(benchmark::Stat
     for (auto _ : state) {
         std::unordered_map<uint64_t, Value448, Murmur3_64> map;
         map.max_load_factor(0.875);
-        for (uint64_t key : keys) {
-            map.insert({key, Value448{}});
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < state.range(0); ++i) {
+            map.insert({keys[i], Value448{}});
+            if (i % 1000 == 0) {
+                auto end = std::chrono::high_resolution_clock::now();
+                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
+                state.SetIterationTime(elapsed_seconds.count());
+            }
         }
     }
 }
@@ -424,8 +451,14 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, AbslFlatHashMap_Insert)(benchmark::Stat
     for (auto _ : state) {
         absl::flat_hash_map<uint64_t, Value448, Murmur3_64> map;
         map.max_load_factor(0.875);
-        for (uint64_t key : keys) {
-            map.insert({key, Value448{}});
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < state.range(0); ++i) {
+            map.insert({keys[i], Value448{}});
+            if (i % 1000 == 0) {
+                auto end = std::chrono::high_resolution_clock::now();
+                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
+                state.SetIterationTime(elapsed_seconds.count());
+            }
         }
     }
 }
@@ -586,7 +619,7 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, OptiMap_LookupExisting)(benchmark::Stat
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(keys[i]));
+            map.find(keys[i]);
         }
     }
 }
@@ -599,7 +632,7 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, StdUnorderedMap_LookupExisting)(benchma
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(keys[i]));
+            map.find(keys[i]);
         }
     }
 }
@@ -612,7 +645,7 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, AbslFlatHashMap_LookupExisting)(benchma
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(keys[i]));
+            map.find(keys[i]);
         }
     }
 }
@@ -629,7 +662,7 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, OptiMap_LookupNonExisting)(benchmark::S
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(non_existing_keys[i]));
+            map.find(non_existing_keys[i]);
         }
     }
 }
@@ -642,7 +675,7 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, StdUnorderedMap_LookupNonExisting)(benc
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(non_existing_keys[i]));
+            map.find(non_existing_keys[i]);
         }
     }
 }
@@ -655,7 +688,7 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, AbslFlatHashMap_LookupNonExisting)(benc
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(non_existing_keys[i]));
+            map.find(non_existing_keys[i]);
         }
     }
 }
@@ -672,8 +705,7 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, OptiMap_Iterate)(benchmark::State& stat
     }
     for (auto _ : state) {
         for (int i = 0; i < 5000; ++i) {
-            auto value = map.find(keys[i]);
-            benchmark::DoNotOptimize(value);
+            map.find(keys[i]);
         }
     }
 }
@@ -686,8 +718,7 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, StdUnorderedMap_Iterate)(benchmark::Sta
     }
     for (auto _ : state) {
         for (int i = 0; i < 5000; ++i) {
-            auto it = map.find(keys[i]);
-            benchmark::DoNotOptimize(it);
+            map.find(keys[i]);
         }
     }
 }
@@ -700,8 +731,7 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, AbslFlatHashMap_Iterate)(benchmark::Sta
     }
     for (auto _ : state) {
         for (int i = 0; i < 5000; ++i) {
-            auto it = map.find(keys[i]);
-            benchmark::DoNotOptimize(it);
+            map.find(keys[i]);
         }
     }
 }
@@ -738,8 +768,14 @@ public:
 BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_Insert)(benchmark::State& state) {
     for (auto _ : state) {
         optimap::HashMap<std::string, uint64_t, Fnv1a> map;
-        for (const auto& key : keys) {
-            map.insert(key, 0);
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < state.range(0); ++i) {
+            map.insert(keys[i], 0);
+            if (i % 1000 == 0) {
+                auto end = std::chrono::high_resolution_clock::now();
+                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
+                state.SetIterationTime(elapsed_seconds.count());
+            }
         }
     }
 }
@@ -748,8 +784,14 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_Insert)(benchmark::St
     for (auto _ : state) {
         std::unordered_map<std::string, uint64_t, Fnv1a> map;
         map.max_load_factor(0.875);
-        for (const auto& key : keys) {
-            map.insert({key, 0});
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < state.range(0); ++i) {
+            map.insert({keys[i], 0});
+            if (i % 1000 == 0) {
+                auto end = std::chrono::high_resolution_clock::now();
+                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
+                state.SetIterationTime(elapsed_seconds.count());
+            }
         }
     }
 }
@@ -758,8 +800,14 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_Insert)(benchmark::St
     for (auto _ : state) {
         absl::flat_hash_map<std::string, uint64_t, Fnv1a> map;
         map.max_load_factor(0.875);
-        for (const auto& key : keys) {
-            map.insert({key, 0});
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < state.range(0); ++i) {
+            map.insert({keys[i], 0});
+            if (i % 1000 == 0) {
+                auto end = std::chrono::high_resolution_clock::now();
+                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
+                state.SetIterationTime(elapsed_seconds.count());
+            }
         }
     }
 }
@@ -920,7 +968,7 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_LookupExisting)(benchmark::St
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(keys[i]));
+            map.find(keys[i]);
         }
     }
 }
@@ -933,7 +981,7 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_LookupExisting)(bench
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(keys[i]));
+            map.find(keys[i]);
         }
     }
 }
@@ -946,7 +994,7 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_LookupExisting)(bench
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(keys[i]));
+            map.find(keys[i]);
         }
     }
 }
@@ -963,7 +1011,7 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_LookupNonExisting)(benchmark:
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(non_existing_keys[i]));
+            map.find(non_existing_keys[i]);
         }
     }
 }
@@ -976,7 +1024,7 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_LookupNonExisting)(be
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(non_existing_keys[i]));
+            map.find(non_existing_keys[i]);
         }
     }
 }
@@ -989,7 +1037,7 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_LookupNonExisting)(be
     }
     for (auto _ : state) {
         for (int i = 0; i < 1000; ++i) {
-            benchmark::DoNotOptimize(map.find(non_existing_keys[i]));
+            map.find(non_existing_keys[i]);
         }
     }
 }
@@ -1006,8 +1054,7 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_Iterate)(benchmark::State& st
     }
     for (auto _ : state) {
         for (int i = 0; i < 5000; ++i) {
-            auto value = map.find(keys[i]);
-            benchmark::DoNotOptimize(value);
+            map.find(keys[i]);
         }
     }
 }
@@ -1020,8 +1067,7 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_Iterate)(benchmark::S
     }
     for (auto _ : state) {
         for (int i = 0; i < 5000; ++i) {
-            auto it = map.find(keys[i]);
-            benchmark::DoNotOptimize(it);
+            map.find(keys[i]);
         }
     }
 }
@@ -1034,8 +1080,7 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_Iterate)(benchmark::S
     }
     for (auto _ : state) {
         for (int i = 0; i < 5000; ++i) {
-            auto it = map.find(keys[i]);
-            benchmark::DoNotOptimize(it);
+            map.find(keys[i]);
         }
     }
 }
