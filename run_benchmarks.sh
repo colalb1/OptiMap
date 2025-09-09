@@ -1,4 +1,5 @@
 #!/bin/bash
+#sudo ./run_benchmarks.sh
 
 # Build the benchmarks in release mode
 cd build
