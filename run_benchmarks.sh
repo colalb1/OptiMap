@@ -13,12 +13,10 @@ mkdir -p benchmark_results
 # Run the benchmarks for each key count and save the results to a CSV file
 for i in {1..5}
 do
-    ./build/OptiMapBenchmarks --benchmark_out=benchmark_results/results_200000_$i.csv --benchmark_out_format=csv --benchmark_filter=200000
-    echo "Finished 200,000 iteration: " $i
-    sync
-    sudo purge
-    ./build/OptiMapBenchmarks --benchmark_out=benchmark_results/results_2000000_$i.csv --benchmark_out_format=csv --benchmark_filter=2000000
-    echo "Finished 2,000,000 iteration: " $i
+    ./build/OptiMapBenchmarks --benchmark_out=benchmark_results/results_200000_$i.csv --benchmark_out_format=csv --benchmark_filter=Insert/200000
+    ./build/OptiMapBenchmarks --benchmark_out=benchmark_results/results_2000000_$i.csv --benchmark_out_format=csv --benchmark_filter=Insert/2000000
+    ./build/OptiMapBenchmarks --benchmark_out=benchmark_results/results_20000000_$i.csv --benchmark_out_format=csv --benchmark_filter=Insert/20000000
+    ./build/OptiMapBenchmarks --benchmark_out=benchmark_results/results_others_$i.csv --benchmark_out_format=csv --benchmark_filter="Erase|Replace|Lookup|Iterate"
     sync
     sudo purge
 done
