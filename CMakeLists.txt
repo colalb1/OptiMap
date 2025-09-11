@@ -7,7 +7,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Set release build flags
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+if(MSVC)
+    set(CMAKE_CXX_FLAGS_RELEASE "/O2 /DNDEBUG")
+else()
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+endif()
 
 # Include FetchContent for dependency management
 include(FetchContent)
@@ -43,12 +47,11 @@ add_executable(OptiMap
 
 # Create benchmarks exe
 add_executable(OptiMapBenchmarks
-    benchmarks/array_sum_benchmark.cpp
     benchmarks/hashmap_benchmark.cpp
 )
 
 # Add abseil-cpp subdirectory
-add_subdirectory(Source/abseil-cpp)
+add_subdirectory(abseil-cpp)
 
 # Link Google Benchmark to benchmarks
 target_link_libraries(OptiMapBenchmarks 
@@ -57,6 +60,10 @@ target_link_libraries(OptiMapBenchmarks
     absl::flat_hash_map
     absl::raw_hash_set
 )
+
+if(MSVC)
+    target_link_options(OptiMapBenchmarks PRIVATE /SUBSYSTEM:CONSOLE)
+endif()
 
 # Enable testing
 enable_testing()
@@ -89,7 +96,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 target_include_directories(OptiMap PRIVATE include)
-target_include_directories(OptiMapBenchmarks PRIVATE include Source/abseil-cpp)
+target_include_directories(OptiMapBenchmarks PRIVATE include abseil-cpp)
 target_include_directories(OptiMapTests PRIVATE include)
 
 # Clang-format
@@ -112,17 +119,17 @@ endif()
 # Clang-tidy
 set(CMAKE_CXX_CLANG_TIDY "clang-tidy;-checks=*")
 
-# Doc generation
-find_package(Doxygen REQUIRED)
+# # Doc generation
+# find_package(Doxygen REQUIRED)
 
-if(DOXYGEN_FOUND)
-    set(DOXYGEN_IN ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile)
-    set(DOXYGEN_OUT ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile.out)
+# if(DOXYGEN_FOUND)
+#     set(DOXYGEN_IN ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile)
+#     set(DOXYGEN_OUT ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile.out)
 
-    add_custom_target(doc
-        COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYGEN_IN}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Generating API documentation with Doxygen"
-        VERBATIM
-    )
-endif()
+#     add_custom_target(doc
+#         COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYGEN_IN}
+#         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+#         COMMENT "Generating API documentation with Doxygen"
+#         VERBATIM
+#     )
+# endif()
