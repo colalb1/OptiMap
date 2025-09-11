@@ -165,11 +165,12 @@ class HashMap {
                 }
             }
 
-            // Check for an empty slot to terminate the probe
+            // Check for empty or deleted slots
             auto empty_mask = group.match_empty_or_deleted();
 
-            // Not all slots are full
-            if (empty_mask.mask != 0xFFFF) {
+            // If there are any empty or deleted slots (mask != 0 means negative control bytes
+            // found)
+            if (empty_mask.mask != 0) {
                 for (auto mask = empty_mask; mask.has_next();) {
                     size_t bit_pos = mask.next();
                     const size_t i = (current_index + bit_pos) & (capacity() - 1);
@@ -181,7 +182,11 @@ class HashMap {
                         first_deleted_slot = i;
                     }
                 }
-                return {first_deleted_slot.value(), false, offset};
+
+                // If we only found deleted slots, return the first one
+                if (first_deleted_slot.has_value()) {
+                    return {first_deleted_slot.value(), false, offset};
+                }
             }
         }
 #else
