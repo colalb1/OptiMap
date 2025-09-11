@@ -28,18 +28,9 @@ if not exist %BENCH_EXE% (
 REM Run the benchmarks for each key count and save the results to a CSV file
 echo Running benchmarks...
 
-REM Run Insert benchmarks with different sizes
-echo Running Insert benchmarks with 200,000 elements...
-%BENCH_EXE% --benchmark_format=csv --benchmark_filter=".*Insert/200000$" --benchmark_min_time=0.01s > benchmark_results/results_insert_200000.csv
+echo Running Insert benchmarks...
+%BENCH_EXE% --benchmark_format=csv --benchmark_filter=".*Insert.*" --benchmark_min_time=0.01s > benchmark_results/results_insert.csv
 
-echo Running Insert benchmarks with 2,000,000 elements...
-%BENCH_EXE% --benchmark_format=csv --benchmark_filter=".*Insert/2000000$" --benchmark_min_time=0.01s > benchmark_results/results_insert_2000000.csv
-
-REM For 20M elements, use even shorter min time as it's very large
-echo Running Insert benchmarks with 20,000,000 elements...
-%BENCH_EXE% --benchmark_format=csv --benchmark_filter=".*Insert/20000000$" --benchmark_min_time=0.001s > benchmark_results/results_insert_20000000.csv
-
-REM Run other benchmarks (Erase, Replace, Lookup, Iterate)
 echo Running Erase benchmarks...
 %BENCH_EXE% --benchmark_format=csv --benchmark_filter=".*Erase.*" --benchmark_min_time=0.01s > benchmark_results/results_erase.csv
 
