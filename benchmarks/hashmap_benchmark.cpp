@@ -1,13 +1,15 @@
 #include <benchmark/benchmark.h>
-#include <unordered_map>
-#include <vector>
-#include <cstdint>
-#include <random>
+
 #include <algorithm>
 #include <array>
+#include <cstdint>
+#include <random>
 #include <string>
-#include "hashmap.hpp"
+#include <unordered_map>
+#include <vector>
+
 #include "absl/container/flat_hash_map.h"
+#include "hashmap.hpp"
 
 // MurmurHash3 finalizer
 static inline uint32_t murmur3_32_finalizer(uint32_t h) {
@@ -41,27 +43,35 @@ struct Fnv1a {
 };
 
 struct Murmur3_32 {
-    size_t operator()(uint32_t k) const {
-        return murmur3_32_finalizer(k);
-    }
+    size_t operator()(uint32_t k) const { return murmur3_32_finalizer(k); }
 };
 
 struct Murmur3_64 {
-    size_t operator()(uint64_t k) const {
-        return murmur3_64_finalizer(k);
-    }
+    size_t operator()(uint64_t k) const { return murmur3_64_finalizer(k); }
 };
 
 // Benchmark fixture for 32-bit integer key, 32-bit value
 class Int32Int32Fixture : public benchmark::Fixture {
-public:
+   public:
     void SetUp(const ::benchmark::State& state) {
-        keys.resize(state.range(0));
+        size_t num_keys = static_cast<size_t>(state.range(0));
+        keys.resize(num_keys);
         non_existing_keys.resize(1000);
-        std::iota(keys.begin(), keys.end(), 0);
-        std::iota(non_existing_keys.begin(), non_existing_keys.end(), state.range(0));
-        std::shuffle(keys.begin(), keys.end(), std::mt19937{std::random_device{}()});
-        std::shuffle(non_existing_keys.begin(), non_existing_keys.end(), std::mt19937{std::random_device{}()});
+
+        // Fill keys with sequential values
+        for (size_t i = 0; i < num_keys; ++i) {
+            keys[i] = static_cast<uint32_t>(i);
+        }
+
+        // Fill non-existing keys
+        for (size_t i = 0; i < 1000; ++i) {
+            non_existing_keys[i] = static_cast<uint32_t>(num_keys + i);
+        }
+
+        // Use a fixed seed for reproducibility and to avoid Windows random_device issues
+        std::mt19937 rng(42);
+        std::shuffle(keys.begin(), keys.end(), rng);
+        std::shuffle(non_existing_keys.begin(), non_existing_keys.end(), rng);
     }
 
     std::vector<uint32_t> keys;
@@ -72,14 +82,8 @@ public:
 BENCHMARK_DEFINE_F(Int32Int32Fixture, OptiMap_Insert)(benchmark::State& state) {
     for (auto _ : state) {
         optimap::HashMap<uint32_t, uint32_t, Murmur3_32> map;
-        auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < state.range(0); ++i) {
             map.insert(keys[i], keys[i]);
-            if (i % 1000 == 0) {
-                auto end = std::chrono::high_resolution_clock::now();
-                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
-                state.SetIterationTime(elapsed_seconds.count());
-            }
         }
     }
 }
@@ -88,14 +92,8 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, StdUnorderedMap_Insert)(benchmark::State& 
     for (auto _ : state) {
         std::unordered_map<uint32_t, uint32_t, Murmur3_32> map;
         map.max_load_factor(0.875);
-        auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < state.range(0); ++i) {
             map.insert({keys[i], keys[i]});
-            if (i % 1000 == 0) {
-                auto end = std::chrono::high_resolution_clock::now();
-                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
-                state.SetIterationTime(elapsed_seconds.count());
-            }
         }
     }
 }
@@ -104,21 +102,21 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, AbslFlatHashMap_Insert)(benchmark::State& 
     for (auto _ : state) {
         absl::flat_hash_map<uint32_t, uint32_t, Murmur3_32> map;
         map.max_load_factor(0.875);
-        auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < state.range(0); ++i) {
             map.insert({keys[i], keys[i]});
-            if (i % 1000 == 0) {
-                auto end = std::chrono::high_resolution_clock::now();
-                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
-                state.SetIterationTime(elapsed_seconds.count());
-            }
         }
     }
 }
 
 BENCHMARK_REGISTER_F(Int32Int32Fixture, OptiMap_Insert)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int32Int32Fixture, StdUnorderedMap_Insert)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int32Int32Fixture, AbslFlatHashMap_Insert)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, StdUnorderedMap_Insert)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, AbslFlatHashMap_Insert)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to erase 1,000 existing keys with N keys in the table
 BENCHMARK_DEFINE_F(Int32Int32Fixture, OptiMap_EraseExisting)(benchmark::State& state) {
@@ -174,9 +172,18 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, AbslFlatHashMap_EraseExisting)(benchmark::
     }
 }
 
-BENCHMARK_REGISTER_F(Int32Int32Fixture, OptiMap_EraseExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int32Int32Fixture, StdUnorderedMap_EraseExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int32Int32Fixture, AbslFlatHashMap_EraseExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, OptiMap_EraseExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, StdUnorderedMap_EraseExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, AbslFlatHashMap_EraseExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to replace 1,000 existing keys with N keys in the table
 BENCHMARK_DEFINE_F(Int32Int32Fixture, OptiMap_ReplaceExisting)(benchmark::State& state) {
@@ -217,9 +224,18 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, AbslFlatHashMap_ReplaceExisting)(benchmark
     }
 }
 
-BENCHMARK_REGISTER_F(Int32Int32Fixture, OptiMap_ReplaceExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int32Int32Fixture, StdUnorderedMap_ReplaceExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int32Int32Fixture, AbslFlatHashMap_ReplaceExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, OptiMap_ReplaceExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, StdUnorderedMap_ReplaceExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, AbslFlatHashMap_ReplaceExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to erase 1,000 nonexisting keys with N keys in the table
 BENCHMARK_DEFINE_F(Int32Int32Fixture, OptiMap_EraseNonExisting)(benchmark::State& state) {
@@ -260,9 +276,18 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, AbslFlatHashMap_EraseNonExisting)(benchmar
     }
 }
 
-BENCHMARK_REGISTER_F(Int32Int32Fixture, OptiMap_EraseNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int32Int32Fixture, StdUnorderedMap_EraseNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int32Int32Fixture, AbslFlatHashMap_EraseNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, OptiMap_EraseNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, StdUnorderedMap_EraseNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, AbslFlatHashMap_EraseNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to look up 1,000 existing keys with N keys in the table
 BENCHMARK_DEFINE_F(Int32Int32Fixture, OptiMap_LookupExisting)(benchmark::State& state) {
@@ -303,9 +328,18 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, AbslFlatHashMap_LookupExisting)(benchmark:
     }
 }
 
-BENCHMARK_REGISTER_F(Int32Int32Fixture, OptiMap_LookupExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int32Int32Fixture, StdUnorderedMap_LookupExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int32Int32Fixture, AbslFlatHashMap_LookupExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, OptiMap_LookupExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, StdUnorderedMap_LookupExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, AbslFlatHashMap_LookupExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to look up 1,000 nonexisting keys with N keys in the table
 BENCHMARK_DEFINE_F(Int32Int32Fixture, OptiMap_LookupNonExisting)(benchmark::State& state) {
@@ -346,9 +380,18 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, AbslFlatHashMap_LookupNonExisting)(benchma
     }
 }
 
-BENCHMARK_REGISTER_F(Int32Int32Fixture, OptiMap_LookupNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int32Int32Fixture, StdUnorderedMap_LookupNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int32Int32Fixture, AbslFlatHashMap_LookupNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, OptiMap_LookupNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, StdUnorderedMap_LookupNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, AbslFlatHashMap_LookupNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to iterate over 5,000 keys with N keys in the table
 BENCHMARK_DEFINE_F(Int32Int32Fixture, OptiMap_Iterate)(benchmark::State& state) {
@@ -390,8 +433,14 @@ BENCHMARK_DEFINE_F(Int32Int32Fixture, AbslFlatHashMap_Iterate)(benchmark::State&
 }
 
 BENCHMARK_REGISTER_F(Int32Int32Fixture, OptiMap_Iterate)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int32Int32Fixture, StdUnorderedMap_Iterate)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int32Int32Fixture, AbslFlatHashMap_Iterate)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, StdUnorderedMap_Iterate)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int32Int32Fixture, AbslFlatHashMap_Iterate)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // ----------------------------------------------------------------------------
 
@@ -401,14 +450,26 @@ struct Value448 {
 };
 
 class Int64Value448Fixture : public benchmark::Fixture {
-public:
+   public:
     void SetUp(const ::benchmark::State& state) {
-        keys.resize(state.range(0));
+        size_t num_keys = static_cast<size_t>(state.range(0));
+        keys.resize(num_keys);
         non_existing_keys.resize(1000);
-        std::iota(keys.begin(), keys.end(), 0);
-        std::iota(non_existing_keys.begin(), non_existing_keys.end(), state.range(0));
-        std::shuffle(keys.begin(), keys.end(), std::mt19937{std::random_device{}()});
-        std::shuffle(non_existing_keys.begin(), non_existing_keys.end(), std::mt19937{std::random_device{}()});
+
+        // Fill keys with sequential values
+        for (size_t i = 0; i < num_keys; ++i) {
+            keys[i] = static_cast<uint64_t>(i);
+        }
+
+        // Fill non-existing keys
+        for (size_t i = 0; i < 1000; ++i) {
+            non_existing_keys[i] = static_cast<uint64_t>(num_keys + i);
+        }
+
+        // Use a fixed seed for reproducibility
+        std::mt19937 rng(42);
+        std::shuffle(keys.begin(), keys.end(), rng);
+        std::shuffle(non_existing_keys.begin(), non_existing_keys.end(), rng);
     }
 
     std::vector<uint64_t> keys;
@@ -419,14 +480,8 @@ public:
 BENCHMARK_DEFINE_F(Int64Value448Fixture, OptiMap_Insert)(benchmark::State& state) {
     for (auto _ : state) {
         optimap::HashMap<uint64_t, Value448, Murmur3_64> map;
-        auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < state.range(0); ++i) {
             map.insert(keys[i], Value448{});
-            if (i % 1000 == 0) {
-                auto end = std::chrono::high_resolution_clock::now();
-                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
-                state.SetIterationTime(elapsed_seconds.count());
-            }
         }
     }
 }
@@ -435,14 +490,8 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, StdUnorderedMap_Insert)(benchmark::Stat
     for (auto _ : state) {
         std::unordered_map<uint64_t, Value448, Murmur3_64> map;
         map.max_load_factor(0.875);
-        auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < state.range(0); ++i) {
             map.insert({keys[i], Value448{}});
-            if (i % 1000 == 0) {
-                auto end = std::chrono::high_resolution_clock::now();
-                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
-                state.SetIterationTime(elapsed_seconds.count());
-            }
         }
     }
 }
@@ -451,21 +500,24 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, AbslFlatHashMap_Insert)(benchmark::Stat
     for (auto _ : state) {
         absl::flat_hash_map<uint64_t, Value448, Murmur3_64> map;
         map.max_load_factor(0.875);
-        auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < state.range(0); ++i) {
             map.insert({keys[i], Value448{}});
-            if (i % 1000 == 0) {
-                auto end = std::chrono::high_resolution_clock::now();
-                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
-                state.SetIterationTime(elapsed_seconds.count());
-            }
         }
     }
 }
 
-BENCHMARK_REGISTER_F(Int64Value448Fixture, OptiMap_Insert)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int64Value448Fixture, StdUnorderedMap_Insert)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int64Value448Fixture, AbslFlatHashMap_Insert)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, OptiMap_Insert)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, StdUnorderedMap_Insert)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, AbslFlatHashMap_Insert)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to erase 1,000 existing keys with N keys in the table
 BENCHMARK_DEFINE_F(Int64Value448Fixture, OptiMap_EraseExisting)(benchmark::State& state) {
@@ -521,9 +573,18 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, AbslFlatHashMap_EraseExisting)(benchmar
     }
 }
 
-BENCHMARK_REGISTER_F(Int64Value448Fixture, OptiMap_EraseExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int64Value448Fixture, StdUnorderedMap_EraseExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int64Value448Fixture, AbslFlatHashMap_EraseExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, OptiMap_EraseExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, StdUnorderedMap_EraseExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, AbslFlatHashMap_EraseExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to replace 1,000 existing keys with N keys in the table
 BENCHMARK_DEFINE_F(Int64Value448Fixture, OptiMap_ReplaceExisting)(benchmark::State& state) {
@@ -564,9 +625,18 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, AbslFlatHashMap_ReplaceExisting)(benchm
     }
 }
 
-BENCHMARK_REGISTER_F(Int64Value448Fixture, OptiMap_ReplaceExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int64Value448Fixture, StdUnorderedMap_ReplaceExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int64Value448Fixture, AbslFlatHashMap_ReplaceExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, OptiMap_ReplaceExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, StdUnorderedMap_ReplaceExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, AbslFlatHashMap_ReplaceExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to erase 1,000 nonexisting keys with N keys in the table
 BENCHMARK_DEFINE_F(Int64Value448Fixture, OptiMap_EraseNonExisting)(benchmark::State& state) {
@@ -581,7 +651,8 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, OptiMap_EraseNonExisting)(benchmark::St
     }
 }
 
-BENCHMARK_DEFINE_F(Int64Value448Fixture, StdUnorderedMap_EraseNonExisting)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(Int64Value448Fixture,
+                   StdUnorderedMap_EraseNonExisting)(benchmark::State& state) {
     std::unordered_map<uint64_t, Value448, Murmur3_64> map;
     map.max_load_factor(0.875);
     for (uint64_t key : keys) {
@@ -594,7 +665,8 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, StdUnorderedMap_EraseNonExisting)(bench
     }
 }
 
-BENCHMARK_DEFINE_F(Int64Value448Fixture, AbslFlatHashMap_EraseNonExisting)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(Int64Value448Fixture,
+                   AbslFlatHashMap_EraseNonExisting)(benchmark::State& state) {
     absl::flat_hash_map<uint64_t, Value448, Murmur3_64> map;
     map.max_load_factor(0.875);
     for (uint64_t key : keys) {
@@ -607,9 +679,18 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, AbslFlatHashMap_EraseNonExisting)(bench
     }
 }
 
-BENCHMARK_REGISTER_F(Int64Value448Fixture, OptiMap_EraseNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int64Value448Fixture, StdUnorderedMap_EraseNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int64Value448Fixture, AbslFlatHashMap_EraseNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, OptiMap_EraseNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, StdUnorderedMap_EraseNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, AbslFlatHashMap_EraseNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to look up 1,000 existing keys with N keys in the table
 BENCHMARK_DEFINE_F(Int64Value448Fixture, OptiMap_LookupExisting)(benchmark::State& state) {
@@ -650,9 +731,18 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, AbslFlatHashMap_LookupExisting)(benchma
     }
 }
 
-BENCHMARK_REGISTER_F(Int64Value448Fixture, OptiMap_LookupExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int64Value448Fixture, StdUnorderedMap_LookupExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int64Value448Fixture, AbslFlatHashMap_LookupExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, OptiMap_LookupExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, StdUnorderedMap_LookupExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, AbslFlatHashMap_LookupExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to look up 1,000 nonexisting keys with N keys in the table
 BENCHMARK_DEFINE_F(Int64Value448Fixture, OptiMap_LookupNonExisting)(benchmark::State& state) {
@@ -667,7 +757,8 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, OptiMap_LookupNonExisting)(benchmark::S
     }
 }
 
-BENCHMARK_DEFINE_F(Int64Value448Fixture, StdUnorderedMap_LookupNonExisting)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(Int64Value448Fixture,
+                   StdUnorderedMap_LookupNonExisting)(benchmark::State& state) {
     std::unordered_map<uint64_t, Value448, Murmur3_64> map;
     map.max_load_factor(0.875);
     for (uint64_t key : keys) {
@@ -680,7 +771,8 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, StdUnorderedMap_LookupNonExisting)(benc
     }
 }
 
-BENCHMARK_DEFINE_F(Int64Value448Fixture, AbslFlatHashMap_LookupNonExisting)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(Int64Value448Fixture,
+                   AbslFlatHashMap_LookupNonExisting)(benchmark::State& state) {
     absl::flat_hash_map<uint64_t, Value448, Murmur3_64> map;
     map.max_load_factor(0.875);
     for (uint64_t key : keys) {
@@ -693,9 +785,18 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, AbslFlatHashMap_LookupNonExisting)(benc
     }
 }
 
-BENCHMARK_REGISTER_F(Int64Value448Fixture, OptiMap_LookupNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int64Value448Fixture, StdUnorderedMap_LookupNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int64Value448Fixture, AbslFlatHashMap_LookupNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, OptiMap_LookupNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, StdUnorderedMap_LookupNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, AbslFlatHashMap_LookupNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to iterate over 5,000 keys with N keys in the table
 BENCHMARK_DEFINE_F(Int64Value448Fixture, OptiMap_Iterate)(benchmark::State& state) {
@@ -736,28 +837,43 @@ BENCHMARK_DEFINE_F(Int64Value448Fixture, AbslFlatHashMap_Iterate)(benchmark::Sta
     }
 }
 
-BENCHMARK_REGISTER_F(Int64Value448Fixture, OptiMap_Iterate)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int64Value448Fixture, StdUnorderedMap_Iterate)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(Int64Value448Fixture, AbslFlatHashMap_Iterate)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, OptiMap_Iterate)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, StdUnorderedMap_Iterate)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(Int64Value448Fixture, AbslFlatHashMap_Iterate)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // ----------------------------------------------------------------------------
 
 // Benchmark fixture for 16-char c-string key, 64-bit value
 class String16Value64Fixture : public benchmark::Fixture {
-public:
+   public:
     void SetUp(const ::benchmark::State& state) {
-        keys.resize(state.range(0));
+        size_t num_keys = static_cast<size_t>(state.range(0));
+        keys.resize(num_keys);
         non_existing_keys.resize(1000);
-        for (int i = 0; i < state.range(0); ++i) {
+
+        for (size_t i = 0; i < num_keys; ++i) {
             keys[i] = std::to_string(i);
             keys[i].resize(16, ' ');
         }
-        for (int i = 0; i < 1000; ++i) {
-            non_existing_keys[i] = std::to_string(i + state.range(0));
+
+        for (size_t i = 0; i < 1000; ++i) {
+            non_existing_keys[i] = std::to_string(num_keys + i);
             non_existing_keys[i].resize(16, ' ');
         }
-        std::shuffle(keys.begin(), keys.end(), std::mt19937{std::random_device{}()});
-        std::shuffle(non_existing_keys.begin(), non_existing_keys.end(), std::mt19937{std::random_device{}()});
+
+        // Use a fixed seed for reproducibility
+        std::mt19937 rng(42);
+        std::shuffle(keys.begin(), keys.end(), rng);
+        std::shuffle(non_existing_keys.begin(), non_existing_keys.end(), rng);
     }
 
     std::vector<std::string> keys;
@@ -768,14 +884,8 @@ public:
 BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_Insert)(benchmark::State& state) {
     for (auto _ : state) {
         optimap::HashMap<std::string, uint64_t, Fnv1a> map;
-        auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < state.range(0); ++i) {
             map.insert(keys[i], 0);
-            if (i % 1000 == 0) {
-                auto end = std::chrono::high_resolution_clock::now();
-                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
-                state.SetIterationTime(elapsed_seconds.count());
-            }
         }
     }
 }
@@ -784,14 +894,8 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_Insert)(benchmark::St
     for (auto _ : state) {
         std::unordered_map<std::string, uint64_t, Fnv1a> map;
         map.max_load_factor(0.875);
-        auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < state.range(0); ++i) {
             map.insert({keys[i], 0});
-            if (i % 1000 == 0) {
-                auto end = std::chrono::high_resolution_clock::now();
-                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
-                state.SetIterationTime(elapsed_seconds.count());
-            }
         }
     }
 }
@@ -800,21 +904,24 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_Insert)(benchmark::St
     for (auto _ : state) {
         absl::flat_hash_map<std::string, uint64_t, Fnv1a> map;
         map.max_load_factor(0.875);
-        auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < state.range(0); ++i) {
             map.insert({keys[i], 0});
-            if (i % 1000 == 0) {
-                auto end = std::chrono::high_resolution_clock::now();
-                auto elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
-                state.SetIterationTime(elapsed_seconds.count());
-            }
         }
     }
 }
 
-BENCHMARK_REGISTER_F(String16Value64Fixture, OptiMap_Insert)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(String16Value64Fixture, StdUnorderedMap_Insert)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(String16Value64Fixture, AbslFlatHashMap_Insert)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, OptiMap_Insert)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, StdUnorderedMap_Insert)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, AbslFlatHashMap_Insert)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to erase 1,000 existing keys with N keys in the table
 BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_EraseExisting)(benchmark::State& state) {
@@ -870,9 +977,18 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_EraseExisting)(benchm
     }
 }
 
-BENCHMARK_REGISTER_F(String16Value64Fixture, OptiMap_EraseExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(String16Value64Fixture, StdUnorderedMap_EraseExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(String16Value64Fixture, AbslFlatHashMap_EraseExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, OptiMap_EraseExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, StdUnorderedMap_EraseExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, AbslFlatHashMap_EraseExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to replace 1,000 existing keys with N keys in the table
 BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_ReplaceExisting)(benchmark::State& state) {
@@ -887,7 +1003,8 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_ReplaceExisting)(benchmark::S
     }
 }
 
-BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_ReplaceExisting)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(String16Value64Fixture,
+                   StdUnorderedMap_ReplaceExisting)(benchmark::State& state) {
     std::unordered_map<std::string, uint64_t, Fnv1a> map;
     map.max_load_factor(0.875);
     for (const auto& key : keys) {
@@ -900,7 +1017,8 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_ReplaceExisting)(benc
     }
 }
 
-BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_ReplaceExisting)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(String16Value64Fixture,
+                   AbslFlatHashMap_ReplaceExisting)(benchmark::State& state) {
     absl::flat_hash_map<std::string, uint64_t, Fnv1a> map;
     map.max_load_factor(0.875);
     for (const auto& key : keys) {
@@ -913,9 +1031,18 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_ReplaceExisting)(benc
     }
 }
 
-BENCHMARK_REGISTER_F(String16Value64Fixture, OptiMap_ReplaceExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(String16Value64Fixture, StdUnorderedMap_ReplaceExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(String16Value64Fixture, AbslFlatHashMap_ReplaceExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, OptiMap_ReplaceExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, StdUnorderedMap_ReplaceExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, AbslFlatHashMap_ReplaceExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to erase 1,000 nonexisting keys with N keys in the table
 BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_EraseNonExisting)(benchmark::State& state) {
@@ -930,7 +1057,8 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_EraseNonExisting)(benchmark::
     }
 }
 
-BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_EraseNonExisting)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(String16Value64Fixture,
+                   StdUnorderedMap_EraseNonExisting)(benchmark::State& state) {
     std::unordered_map<std::string, uint64_t, Fnv1a> map;
     map.max_load_factor(0.875);
     for (const auto& key : keys) {
@@ -943,7 +1071,8 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_EraseNonExisting)(ben
     }
 }
 
-BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_EraseNonExisting)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(String16Value64Fixture,
+                   AbslFlatHashMap_EraseNonExisting)(benchmark::State& state) {
     absl::flat_hash_map<std::string, uint64_t, Fnv1a> map;
     map.max_load_factor(0.875);
     for (const auto& key : keys) {
@@ -956,9 +1085,18 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_EraseNonExisting)(ben
     }
 }
 
-BENCHMARK_REGISTER_F(String16Value64Fixture, OptiMap_EraseNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(String16Value64Fixture, StdUnorderedMap_EraseNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(String16Value64Fixture, AbslFlatHashMap_EraseNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, OptiMap_EraseNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, StdUnorderedMap_EraseNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, AbslFlatHashMap_EraseNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to look up 1,000 existing keys with N keys in the table
 BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_LookupExisting)(benchmark::State& state) {
@@ -973,7 +1111,8 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_LookupExisting)(benchmark::St
     }
 }
 
-BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_LookupExisting)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(String16Value64Fixture,
+                   StdUnorderedMap_LookupExisting)(benchmark::State& state) {
     std::unordered_map<std::string, uint64_t, Fnv1a> map;
     map.max_load_factor(0.875);
     for (const auto& key : keys) {
@@ -986,7 +1125,8 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_LookupExisting)(bench
     }
 }
 
-BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_LookupExisting)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(String16Value64Fixture,
+                   AbslFlatHashMap_LookupExisting)(benchmark::State& state) {
     absl::flat_hash_map<std::string, uint64_t, Fnv1a> map;
     map.max_load_factor(0.875);
     for (const auto& key : keys) {
@@ -999,9 +1139,18 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_LookupExisting)(bench
     }
 }
 
-BENCHMARK_REGISTER_F(String16Value64Fixture, OptiMap_LookupExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(String16Value64Fixture, StdUnorderedMap_LookupExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(String16Value64Fixture, AbslFlatHashMap_LookupExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, OptiMap_LookupExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, StdUnorderedMap_LookupExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, AbslFlatHashMap_LookupExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to look up 1,000 nonexisting keys with N keys in the table
 BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_LookupNonExisting)(benchmark::State& state) {
@@ -1016,7 +1165,8 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_LookupNonExisting)(benchmark:
     }
 }
 
-BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_LookupNonExisting)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(String16Value64Fixture,
+                   StdUnorderedMap_LookupNonExisting)(benchmark::State& state) {
     std::unordered_map<std::string, uint64_t, Fnv1a> map;
     map.max_load_factor(0.875);
     for (const auto& key : keys) {
@@ -1029,7 +1179,8 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_LookupNonExisting)(be
     }
 }
 
-BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_LookupNonExisting)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(String16Value64Fixture,
+                   AbslFlatHashMap_LookupNonExisting)(benchmark::State& state) {
     absl::flat_hash_map<std::string, uint64_t, Fnv1a> map;
     map.max_load_factor(0.875);
     for (const auto& key : keys) {
@@ -1042,9 +1193,18 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_LookupNonExisting)(be
     }
 }
 
-BENCHMARK_REGISTER_F(String16Value64Fixture, OptiMap_LookupNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(String16Value64Fixture, StdUnorderedMap_LookupNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(String16Value64Fixture, AbslFlatHashMap_LookupNonExisting)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, OptiMap_LookupNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, StdUnorderedMap_LookupNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, AbslFlatHashMap_LookupNonExisting)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 // Time to iterate over 5,000 keys with N keys in the table
 BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_Iterate)(benchmark::State& state) {
@@ -1085,8 +1245,17 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_Iterate)(benchmark::S
     }
 }
 
-BENCHMARK_REGISTER_F(String16Value64Fixture, OptiMap_Iterate)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(String16Value64Fixture, StdUnorderedMap_Iterate)->Arg(200000)->Arg(2000000)->Arg(20000000);
-BENCHMARK_REGISTER_F(String16Value64Fixture, AbslFlatHashMap_Iterate)->Arg(200000)->Arg(2000000)->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, OptiMap_Iterate)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, StdUnorderedMap_Iterate)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
+BENCHMARK_REGISTER_F(String16Value64Fixture, AbslFlatHashMap_Iterate)
+    ->Arg(200000)
+    ->Arg(2000000)
+    ->Arg(20000000);
 
 BENCHMARK_MAIN();
