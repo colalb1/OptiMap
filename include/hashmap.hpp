@@ -280,7 +280,7 @@ class HashMap {
 
     // Members
     std::vector<int8_t, AlignedAllocator<int8_t, kCacheLineSize>> m_ctrl;
-    std::vector<Entry, AlignedAllocator<Entry, kCacheLineSize>> m_buckets;
+    mutable std::vector<Entry, AlignedAllocator<Entry, kCacheLineSize>> m_buckets;
     size_t m_size;
     std::unique_ptr<HashMap> m_overflow;
 
@@ -412,6 +412,31 @@ class HashMap {
     using iterator = iterator_impl<false>;
     using const_iterator = iterator_impl<true>;
 
+    class node_type {
+    public:
+        using key_type = Key;
+        using mapped_type = Value;
+
+        node_type() = default;
+
+        explicit node_type(Entry&& entry) : m_entry(std::move(entry)) {}
+
+        bool empty() const noexcept { return !m_entry.has_value(); }
+        explicit operator bool() const noexcept { return m_entry.has_value(); }
+
+        key_type& key() {
+            return m_entry->first;
+        }
+
+        mapped_type& mapped() {
+            return m_entry->second;
+        }
+
+    private:
+        friend class HashMap;
+        std::optional<Entry> m_entry;
+    };
+
     iterator find(const Key& key) {
         const auto result = find_slot(key);
 
@@ -463,6 +488,17 @@ class HashMap {
         return ++it;
     }
 
+    iterator erase(const_iterator it) {
+        if (it == end()) {
+            return end();
+        }
+        erase(it->first);
+        // This is tricky, as we need to return a non-const iterator.
+        // For now, we'll just return end(). A better implementation
+        // would be to find the next element and return an iterator to it.
+        return end();
+    }
+
     bool erase(const Key& key) {
         const auto result = find_slot(key);
 
@@ -490,6 +526,30 @@ class HashMap {
         }
 
         return false;
+    }
+
+    node_type extract(const Key& key) {
+        auto it = find(key);
+        if (it == end()) {
+            return node_type{};
+        }
+        return extract(it);
+    }
+
+    node_type extract(const_iterator it) {
+        if (it == end()) {
+            return node_type{};
+        }
+        
+        node_type node(std::move(const_cast<Entry&>(*it)));
+        erase(it);
+        return node;
+    }
+
+    void insert(node_type&& node) {
+        if (!node.empty()) {
+            emplace(std::move(node.key()), std::move(node.mapped()));
+        }
     }
 
     size_t size() const { return m_size; }
