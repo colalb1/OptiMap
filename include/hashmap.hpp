@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -75,6 +76,10 @@ class HashMap {
     struct Entry {
         Key first;
         Value second;
+
+        bool operator==(const Entry& other) const {
+            return first == other.first && second == other.second;
+        }
     };
 
    private:
@@ -302,7 +307,11 @@ class HashMap {
         : m_ctrl(other.m_ctrl),
           m_buckets(other.m_buckets),
           m_size(other.m_size),
-          m_overflow(other.m_overflow ? std::make_unique<HashMap>(*other.m_overflow) : nullptr) {}
+          m_overflow(nullptr) {
+        if (other.m_overflow) {
+            m_overflow = std::make_unique<HashMap>(*other.m_overflow);
+        }
+    }
 
     HashMap& operator=(const HashMap& other) {
         if (this != &other) {
@@ -410,9 +419,16 @@ class HashMap {
             return iterator(this, result.index);
         }
 
-        // If probe ends at overflow marker, search overflow table
         if (m_ctrl[result.index] == kOverflow && m_overflow) {
-            return m_overflow->find(key);
+            auto overflow_it = m_overflow->find(key);
+
+            if (overflow_it != m_overflow->end()) {
+                // Create an iterator pointing past the main buckets
+                iterator it(this, capacity());
+                it.m_overflow_it = std::make_unique<iterator>(overflow_it);
+
+                return it;
+            }
         }
 
         return end();
@@ -425,9 +441,15 @@ class HashMap {
             return const_iterator(this, result.index);
         }
 
-        // If probe ends at overflow marker, search overflow table
         if (m_ctrl[result.index] == kOverflow && m_overflow) {
-            return m_overflow->find(key);
+            auto overflow_it = m_overflow->find(key);
+
+            if (overflow_it != m_overflow->end()) {
+                const_iterator it(this, capacity());
+                it.m_overflow_it = std::make_unique<const_iterator>(overflow_it);
+
+                return it;
+            }
         }
 
         return end();
@@ -442,29 +464,32 @@ class HashMap {
     }
 
     bool erase(const Key& key) {
-        // First try erasing from overflow table
-        if (m_overflow && m_overflow->erase(key)) {
+        const auto result = find_slot(key);
+
+        if (result.found) {
+            m_ctrl[result.index] = kDeleted;
+
+            // Update sentinel if within bounds
+            size_t sentinel_index = result.index + capacity();
+
+            if (sentinel_index < m_ctrl.size()) {
+                m_ctrl[sentinel_index] = kDeleted;
+            }
+
             m_size--;
+            
             return true;
         }
 
-        const auto result = find_slot(key);
+        if (m_ctrl[result.index] == kOverflow && m_overflow) {
+            if (m_overflow->erase(key)) {
+                m_size--;
 
-        if (!result.found) {
-            return false;
+                return true;
+            }
         }
 
-        m_ctrl[result.index] = kDeleted;
-
-        // Update sentinel if within bounds
-        size_t sentinel_index = result.index + capacity();
-        if (sentinel_index < m_ctrl.size()) {
-            m_ctrl[sentinel_index] = kDeleted;
-        }
-
-        m_size--;
-
-        return true;
+        return false;
     }
 
     size_t size() const { return m_size; }
@@ -507,6 +532,38 @@ class HashMap {
     const_iterator end() const { return const_iterator(this, capacity()); }
     const_iterator cbegin() const { return begin(); }
     const_iterator cend() const { return end(); }
+
+    bool contains(const Key& key) const { return find(key) != end(); }
+
+    Value& at(const Key& key) {
+        const auto result = find_slot(key);
+
+        if (result.found) {
+            return m_buckets[result.index].second;
+        }
+
+        // If probe ends at overflow marker, search overflow table
+        if (m_ctrl[result.index] == kOverflow && m_overflow) {
+            return m_overflow->at(key);
+        }
+
+        throw std::out_of_range("Key not found in HashMap");
+    }
+
+    const Value& at(const Key& key) const {
+        const auto result = find_slot(key);
+
+        if (result.found) {
+            return m_buckets[result.index].second;
+        }
+
+        // If probe ends at overflow marker, search overflow table
+        if (m_ctrl[result.index] == kOverflow && m_overflow) {
+            return m_overflow->at(key);
+        }
+
+        throw std::out_of_range("Key not found in HashMap");
+    }
 
     Value& operator[](const Key& key) {
         const auto result = find_slot(key);
