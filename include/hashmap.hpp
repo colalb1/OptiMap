@@ -413,7 +413,7 @@ class HashMap {
     using const_iterator = iterator_impl<true>;
 
     class node_type {
-    public:
+       public:
         using key_type = Key;
         using mapped_type = Value;
 
@@ -424,15 +424,11 @@ class HashMap {
         bool empty() const noexcept { return !m_entry.has_value(); }
         explicit operator bool() const noexcept { return m_entry.has_value(); }
 
-        key_type& key() {
-            return m_entry->first;
-        }
+        key_type& key() { return m_entry->first; }
 
-        mapped_type& mapped() {
-            return m_entry->second;
-        }
+        mapped_type& mapped() { return m_entry->second; }
 
-    private:
+       private:
         friend class HashMap;
         std::optional<Entry> m_entry;
     };
@@ -513,7 +509,7 @@ class HashMap {
             }
 
             m_size--;
-            
+
             return true;
         }
 
@@ -540,7 +536,7 @@ class HashMap {
         if (it == end()) {
             return node_type{};
         }
-        
+
         node_type node(std::move(const_cast<Entry&>(*it)));
         erase(it);
         return node;
