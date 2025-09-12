@@ -238,6 +238,7 @@ class HashMap {
             auto old_ctrl = std::move(m_ctrl);
             auto old_buckets = std::move(m_buckets);
             auto old_overflow = std::move(m_overflow);
+            auto old_size = m_size;
 
             // Assign new vectors to member variables
             m_ctrl = std::move(new_ctrl);
@@ -249,16 +250,17 @@ class HashMap {
             for (size_t i = 0; i < old_buckets.size(); ++i) {
                 // If slot was occupied
                 if (old_ctrl[i] >= 0) {
-                    insert(std::move(old_buckets[i].first), std::move(old_buckets[i].second));
+                    emplace(std::move(old_buckets[i].first), std::move(old_buckets[i].second));
                 }
             }
 
             // Re-insert elements from the old overflow table
             if (old_overflow) {
                 for (auto&& entry : *old_overflow) {
-                    insert(std::move(entry.first), std::move(entry.second));
+                    emplace(std::move(entry.first), std::move(entry.second));
                 }
             }
+            m_size = old_size;
         } catch (const std::exception& e) {
             // Handle any exceptions during resize
             throw std::runtime_error("HashMap resize failed: " + std::string(e.what()));
@@ -300,11 +302,7 @@ class HashMap {
         : m_ctrl(other.m_ctrl),
           m_buckets(other.m_buckets),
           m_size(other.m_size),
-          m_overflow(nullptr) {
-        if (other.m_overflow) {
-            m_overflow = std::make_unique<HashMap>(*other.m_overflow);
-        }
-    }
+          m_overflow(other.m_overflow ? std::make_unique<HashMap>(*other.m_overflow) : nullptr) {}
 
     HashMap& operator=(const HashMap& other) {
         if (this != &other) {
