@@ -108,8 +108,8 @@ TEST(ResizeTest, InsertMany) {
     EXPECT_EQ(map.size(), num_elements);
     for (int i = 0; i < num_elements; ++i) {
         auto val = map.find(i);
-    ASSERT_NE(val, map.end());
-    EXPECT_EQ(val->second, i);
+        ASSERT_NE(val, map.end());
+        EXPECT_EQ(val->second, i);
     }
 }
 
@@ -390,4 +390,60 @@ TEST(MoveSemanticsTest, MoveOnlyValue) {
     auto val = map.find(1);
     ASSERT_NE(val, map.end());
     EXPECT_EQ(val->second.val, 100);
+}
+
+// Test for emplace behavior, inspired by ankerl's try_emplace tests
+struct RegularType {
+    std::size_t i;
+    std::string s;
+
+    RegularType() : i(0), s("") {}
+    RegularType(std::size_t i_val, std::string s_val) : i(i_val), s(std::move(s_val)) {}
+
+    bool operator==(const RegularType& other) const { return i == other.i && s == other.s; }
+};
+
+TEST(EmplaceTest, TryEmplace) {
+    optimap::HashMap<std::string, RegularType> map;
+
+    // 1. Emplace a new element
+    map.emplace("a", RegularType(1, "b"));
+    auto val_a = map.find("a");
+    ASSERT_NE(val_a, map.end());
+    EXPECT_EQ(val_a->second, RegularType(1, "b"));
+    EXPECT_EQ(map.size(), 1);
+
+    // 2. Try to emplace with an existing key
+    map.emplace("a", RegularType(99, "z"));
+    EXPECT_EQ(map.size(), 1);
+    val_a = map.find("a");
+    ASSERT_NE(val_a, map.end());
+    EXPECT_EQ(val_a->second, RegularType(1, "b"));  // Value should not have changed
+}
+
+// Tests for C++17 extract functionality
+TEST(ExtractTest, ExtractAndInsertNode) {
+    optimap::HashMap<int, std::string> map1;
+    map1.insert(1, "one");
+    map1.insert(2, "two");
+
+    // Extract node with key 1
+    auto node = map1.extract(1);
+    ASSERT_TRUE(node);
+    EXPECT_EQ(node.key(), 1);
+    EXPECT_EQ(node.mapped(), "one");
+    EXPECT_EQ(map1.size(), 1);
+    EXPECT_EQ(map1.find(1), map1.end());
+
+    // Insert node into a new map
+    optimap::HashMap<int, std::string> map2;
+    map2.insert(std::move(node));
+    EXPECT_EQ(map2.size(), 1);
+    auto val2 = map2.find(1);
+    ASSERT_NE(val2, map2.end());
+    EXPECT_EQ(val2->second, "one");
+
+    // Try to extract a non-existent key
+    auto empty_node = map1.extract(99);
+    EXPECT_FALSE(empty_node);
 }
