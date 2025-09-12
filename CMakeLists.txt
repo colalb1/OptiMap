@@ -45,13 +45,17 @@ add_executable(OptiMap
     optimap/main.cpp
 )
 
+target_include_directories(OptiMap PRIVATE
+    include
+)
+
 # Create benchmarks exe
 add_executable(OptiMapBenchmarks
     benchmarks/hashmap_benchmark.cpp
 )
 
 # Add abseil-cpp subdirectory
-add_subdirectory(abseil-cpp)
+add_subdirectory(Source/abseil-cpp)
 
 # Link Google Benchmark to benchmarks
 target_link_libraries(OptiMapBenchmarks 
@@ -72,6 +76,8 @@ enable_testing()
 add_executable(OptiMapTests
     tests/sample_test.cpp
     tests/test_hashmap.cpp
+    tests/test_at.cpp
+    tests/test_contains.cpp
 )
 
 # Link GoogleTest to tests
@@ -95,8 +101,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     endforeach()
 endif()
 
-target_include_directories(OptiMap PRIVATE include)
-target_include_directories(OptiMapBenchmarks PRIVATE include abseil-cpp)
+target_include_directories(OptiMapBenchmarks PRIVATE include Source/abseil-cpp)
 target_include_directories(OptiMapTests PRIVATE include)
 
 # Clang-format
