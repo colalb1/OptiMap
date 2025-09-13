@@ -40,14 +40,6 @@ FetchContent_MakeAvailable(googletest)
 message(STATUS "GoogleTest Source Dir: ${googletest_SOURCE_DIR}")
 message(STATUS "GoogleTest Binary Dir: ${googletest_BINARY_DIR}")
 
-# Add the source files
-add_executable(OptiMap
-    demo.cpp
-)
-
-target_include_directories(OptiMap PRIVATE
-    include
-)
 
 # Create benchmarks exe
 add_executable(OptiMapBenchmarks
@@ -96,7 +88,7 @@ add_test(NAME OptiMapTests COMMAND OptiMapTests)
 
 # Coverage configuration
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    foreach(target OptiMap OptiMapTests)
+    foreach(target OptiMapTests)
         target_compile_options(${target} PRIVATE -fprofile-arcs -ftest-coverage)
         target_link_options(${target} PRIVATE -fprofile-arcs -ftest-coverage)
     endforeach()
@@ -109,7 +101,7 @@ target_include_directories(OptiMapTests PRIVATE include)
 find_program(CLANG_FORMAT_EXE NAMES clang-format)
 if(CLANG_FORMAT_EXE)
     file(GLOB_RECURSE ALL_CXX_SOURCE_FILES 
-        optimap/*.cpp 
+        demo.cpp
         include/*.hpp 
         benchmarks/*.cpp
         tests/*.cpp
