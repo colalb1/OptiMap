@@ -101,6 +101,9 @@ static inline uint64_t wyhash(const void* key, size_t len, uint64_t seed, const 
 
 }  // namespace wyhash
 
+template <typename T>
+struct WyHash;
+
 // Utility function to combine hash values
 template <class T>
 inline void hash_combine(std::size_t& seed, const T& v) {
@@ -254,7 +257,7 @@ template <typename... Types>
 struct WyHash<std::variant<Types...>> {
     size_t operator()(const std::variant<Types...>& v) const noexcept {
         return std::visit(
-            (const auto& value) { return WyHash<std::decay_t<decltype(value)>>{}(value); }, v);
+            [](const auto& value) { return WyHash<std::decay_t<decltype(value)>>{}(value); }, v);
     }
 };
 
