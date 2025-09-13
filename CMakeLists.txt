@@ -10,7 +10,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 if(MSVC)
     set(CMAKE_CXX_FLAGS_RELEASE "/O2 /DNDEBUG")
 else()
-    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
 endif()
 
 # Include FetchContent for dependency management
