@@ -42,7 +42,7 @@ message(STATUS "GoogleTest Binary Dir: ${googletest_BINARY_DIR}")
 
 # Add the source files
 add_executable(OptiMap
-    optimap/main.cpp
+    demo.cpp
 )
 
 target_include_directories(OptiMap PRIVATE
@@ -52,6 +52,7 @@ target_include_directories(OptiMap PRIVATE
 # Create benchmarks exe
 add_executable(OptiMapBenchmarks
     benchmarks/hashmap_benchmark.cpp
+    benchmarks/accidentally_quadratic_benchmark.cpp
 )
 
 # Add abseil-cpp subdirectory
