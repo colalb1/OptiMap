@@ -92,14 +92,12 @@ class HashMap {
 
     // Control bytes mark the state of a slot
     // Negative values are special states; positive values (0-127) are h2 hashes
-    static constexpr int8_t kEmpty = -128;   // 0b10000000
-    static constexpr int8_t kDeleted = -2;   // 0b11111110
-    static constexpr int8_t kOverflow = -3;  // 0b11111101
+    static constexpr int8_t kEmpty = -128;  // 0b10000000
+    static constexpr int8_t kDeleted = -2;  // 0b11111110
 
     struct FindResult {
         size_t index;
         bool found;
-        size_t probe_distance;
     };
 
 #if defined(__SSE2__) || (defined(_M_X64) || defined(_M_IX86))
@@ -160,7 +158,7 @@ class HashMap {
                 const size_t i = (current_index + mask.next()) & (capacity() - 1);
 
                 if (m_buckets[i].first == key) {
-                    return {i, true, offset};
+                    return {i, true};
                 }
             }
 
@@ -174,8 +172,8 @@ class HashMap {
                     size_t bit_pos = mask.next();
                     const size_t i = (current_index + bit_pos) & (capacity() - 1);
 
-                    if (m_ctrl[i] == kEmpty || m_ctrl[i] == kOverflow) {
-                        return {first_deleted_slot.value_or(i), false, offset + bit_pos};
+                    if (m_ctrl[i] == kEmpty) {
+                        return {first_deleted_slot.value_or(i), false};
                     }
                     if (!first_deleted_slot.has_value() && m_ctrl[i] == kDeleted) {
                         first_deleted_slot = i;
@@ -184,7 +182,7 @@ class HashMap {
 
                 // If we only found deleted slots, return the first one
                 if (first_deleted_slot.has_value()) {
-                    return {first_deleted_slot.value(), false, offset};
+                    return {first_deleted_slot.value(), false};
                 }
             }
         }
@@ -201,10 +199,10 @@ class HashMap {
             const int8_t ctrl_byte = m_ctrl[index];
 
             if (ctrl_byte == hash2_val && m_buckets[index].first == key) {
-                return {index, true, offset};
+                return {index, true};
             }
-            if (ctrl_byte == kEmpty || ctrl_byte == kOverflow) {
-                return {first_deleted_slot.value_or(index), false, offset};
+            if (ctrl_byte == kEmpty) {
+                return {first_deleted_slot.value_or(index), false};
             }
             if (!first_deleted_slot.has_value() && ctrl_byte == kDeleted) {
                 first_deleted_slot = index;
@@ -242,14 +240,12 @@ class HashMap {
             // Temporarily store old data
             auto old_ctrl = std::move(m_ctrl);
             auto old_buckets = std::move(m_buckets);
-            auto old_overflow = std::move(m_overflow);
             auto old_size = m_size;
 
             // Assign new vectors to member variables
             m_ctrl = std::move(new_ctrl);
             m_buckets = std::move(new_buckets);
             m_size = 0;
-            m_overflow = nullptr;  // Clear overflow
 
             // Re-insert elements from the old primary table
             for (size_t i = 0; i < old_buckets.size(); ++i) {
@@ -259,12 +255,6 @@ class HashMap {
                 }
             }
 
-            // Re-insert elements from the old overflow table
-            if (old_overflow) {
-                for (auto&& entry : *old_overflow) {
-                    emplace(std::move(entry.first), std::move(entry.second));
-                }
-            }
             m_size = old_size;
         } catch (const std::exception& e) {
             // Handle any exceptions during resize
@@ -282,7 +272,6 @@ class HashMap {
     std::vector<int8_t, AlignedAllocator<int8_t, kCacheLineSize>> m_ctrl;
     mutable std::vector<Entry, AlignedAllocator<Entry, kCacheLineSize>> m_buckets;
     size_t m_size;
-    std::unique_ptr<HashMap> m_overflow;
 
    public:
     explicit HashMap(size_t capacity = 16) : m_size(0) {
@@ -303,48 +292,10 @@ class HashMap {
     }
 
     // Copy/move constructors and assignment operators
-    HashMap(const HashMap& other)
-        : m_ctrl(other.m_ctrl),
-          m_buckets(other.m_buckets),
-          m_size(other.m_size),
-          m_overflow(nullptr) {
-        if (other.m_overflow) {
-            m_overflow = std::make_unique<HashMap>(*other.m_overflow);
-        }
-    }
-
-    HashMap& operator=(const HashMap& other) {
-        if (this != &other) {
-            m_ctrl = other.m_ctrl;
-            m_buckets = other.m_buckets;
-            m_size = other.m_size;
-            if (other.m_overflow) {
-                m_overflow = std::make_unique<HashMap>(*other.m_overflow);
-            } else {
-                m_overflow.reset();
-            }
-        }
-        return *this;
-    }
-
-    HashMap(HashMap&& other) noexcept
-        : m_ctrl(std::move(other.m_ctrl)),
-          m_buckets(std::move(other.m_buckets)),
-          m_size(other.m_size),
-          m_overflow(std::move(other.m_overflow)) {
-        other.m_size = 0;
-    }
-
-    HashMap& operator=(HashMap&& other) noexcept {
-        if (this != &other) {
-            m_ctrl = std::move(other.m_ctrl);
-            m_buckets = std::move(other.m_buckets);
-            m_size = other.m_size;
-            m_overflow = std::move(other.m_overflow);
-            other.m_size = 0;
-        }
-        return *this;
-    }
+    HashMap(const HashMap& other) = default;
+    HashMap& operator=(const HashMap& other) = default;
+    HashMap(HashMap&& other) noexcept = default;
+    HashMap& operator=(HashMap&& other) noexcept = default;
 
     template <typename K, typename V>
     bool emplace(K&& key, V&& value) {
@@ -358,28 +309,7 @@ class HashMap {
             return false;  // Duplicate key
         }
 
-        // If probe sequence too long, move to overflow table
-        if (result.probe_distance > kGroupWidth) {
-            if (!m_overflow) {
-                m_overflow = std::make_unique<HashMap>();
-            }
-            // Mark end of the primary probe chain with overflow marker
-            m_ctrl[result.index] = kOverflow;
-
-            // Update sentinel if within bounds
-            size_t sentinel_index = result.index + capacity();
-            if (sentinel_index < m_ctrl.size()) {
-                m_ctrl[sentinel_index] = kOverflow;
-            }
-
-            bool was_inserted = m_overflow->emplace(std::forward<K>(key), std::forward<V>(value));
-            if (was_inserted) {
-                m_size++;
-            }
-            return was_inserted;
-        }
-
-        // Else, insert into the primary table (per usual)
+        // Insert into the primary table
         const int8_t hash2_val = h2(Hash{}(key));
 
         // Create a new Entry with the key and value
@@ -440,18 +370,6 @@ class HashMap {
             return iterator(this, result.index);
         }
 
-        if (m_ctrl[result.index] == kOverflow && m_overflow) {
-            auto overflow_it = m_overflow->find(key);
-
-            if (overflow_it != m_overflow->end()) {
-                // Create an iterator pointing past the main buckets
-                iterator it(this, capacity());
-                it.m_overflow_it = std::make_unique<iterator>(overflow_it);
-
-                return it;
-            }
-        }
-
         return end();
     }
 
@@ -460,17 +378,6 @@ class HashMap {
 
         if (result.found) {
             return const_iterator(this, result.index);
-        }
-
-        if (m_ctrl[result.index] == kOverflow && m_overflow) {
-            auto overflow_it = m_overflow->find(key);
-
-            if (overflow_it != m_overflow->end()) {
-                const_iterator it(this, capacity());
-                it.m_overflow_it = std::make_unique<const_iterator>(overflow_it);
-
-                return it;
-            }
         }
 
         return end();
@@ -513,14 +420,6 @@ class HashMap {
             return true;
         }
 
-        if (m_ctrl[result.index] == kOverflow && m_overflow) {
-            if (m_overflow->erase(key)) {
-                m_size--;
-
-                return true;
-            }
-        }
-
         return false;
     }
 
@@ -559,11 +458,6 @@ class HashMap {
         m_buckets.clear();
         m_buckets.resize(capacity());
 
-        // Clear the overflow map
-        if (m_overflow) {
-            m_overflow->clear();
-        }
-
         m_size = 0;
     }
 
@@ -598,11 +492,6 @@ class HashMap {
             return m_buckets[result.index].second;
         }
 
-        // If probe ends at overflow marker, search overflow table
-        if (m_ctrl[result.index] == kOverflow && m_overflow) {
-            return m_overflow->at(key);
-        }
-
         throw std::out_of_range("Key not found in HashMap");
     }
 
@@ -613,11 +502,6 @@ class HashMap {
             return m_buckets[result.index].second;
         }
 
-        // If probe ends at overflow marker, search overflow table
-        if (m_ctrl[result.index] == kOverflow && m_overflow) {
-            return m_overflow->at(key);
-        }
-
         throw std::out_of_range("Key not found in HashMap");
     }
 
@@ -626,11 +510,6 @@ class HashMap {
 
         if (result.found) {
             return m_buckets[result.index].second;
-        }
-
-        // If probe ends at overflow marker, search overflow table
-        if (m_ctrl[result.index] == kOverflow && m_overflow) {
-            return (*m_overflow)[key];
         }
 
         // Key not found, insert a new element
@@ -648,64 +527,24 @@ class HashMap {
         using reference = std::conditional_t<IsConst, const Entry&, Entry&>;
         using pointer = std::conditional_t<IsConst, const Entry*, Entry*>;
 
-        // Use unique_ptr to break the recursive dependency
-        using iterator_type = std::conditional_t<IsConst, typename HashMap::const_iterator,
-                                                 typename HashMap::iterator>;
-        using overflow_iterator = std::unique_ptr<iterator_type>;
-
         iterator_impl() : m_map(nullptr), m_index(0) {}
         iterator_impl(map_ptr map, size_t index) : m_map(map), m_index(index) {}
 
         // Copy constructor needed for unique_ptr member
-        iterator_impl(const iterator_impl& other) : m_map(other.m_map), m_index(other.m_index) {
-            if (other.m_overflow_it) {
-                m_overflow_it = std::make_unique<iterator_type>(*other.m_overflow_it);
-            }
-        }
+        iterator_impl(const iterator_impl& other) = default;
 
         // Copy assignment
-        iterator_impl& operator=(const iterator_impl& other) {
-            if (this != &other) {
-                m_map = other.m_map;
-                m_index = other.m_index;
-                if (other.m_overflow_it) {
-                    m_overflow_it = std::make_unique<iterator_type>(*other.m_overflow_it);
-                } else {
-                    m_overflow_it.reset();
-                }
-            }
-            return *this;
-        }
+        iterator_impl& operator=(const iterator_impl& other) = default;
 
         // Mutable iterator converted to const_iterator
-        operator iterator_impl<true>() const {
-            iterator_impl<true> const_it(m_map, m_index);
-            if (m_overflow_it) {
-                const_it.m_overflow_it =
-                    std::make_unique<typename HashMap::const_iterator>(*m_overflow_it);
-            }
+        operator iterator_impl<true>() const { return iterator_impl<true>(m_map, m_index); }
 
-            return const_it;
-        }
-
-        reference operator*() const {
-            // Dereference the unique_ptr first, then the iterator
-            if (m_overflow_it) {
-                return **m_overflow_it;
-            }
-
-            return m_map->m_buckets[m_index];
-        }
+        reference operator*() const { return m_map->m_buckets[m_index]; }
 
         pointer operator->() const { return &operator*(); }
 
         iterator_impl& operator++() {
-            // Advance active iterator
-            if (m_overflow_it) {
-                ++(*m_overflow_it);
-            } else {
-                m_index++;
-            }
+            m_index++;
 
             // Skip empty & deleted slots
             find_next_valid();
@@ -719,16 +558,7 @@ class HashMap {
         }
 
         friend bool operator==(const iterator_impl& a, const iterator_impl& b) {
-            if (a.m_map != b.m_map || a.m_index != b.m_index) return false;
-
-            // Handle pointer logic for overflow iterator
-            const bool a_has_overflow = static_cast<bool>(a.m_overflow_it);
-            const bool b_has_overflow = static_cast<bool>(b.m_overflow_it);
-
-            if (a_has_overflow != b_has_overflow) return false;
-            if (!a_has_overflow) return true;  // Both null
-
-            return *a.m_overflow_it == *b.m_overflow_it;
+            return a.m_map == b.m_map && a.m_index == b.m_index;
         }
 
         friend bool operator!=(const iterator_impl& a, const iterator_impl& b) { return !(a == b); }
@@ -736,15 +566,6 @@ class HashMap {
        private:
         friend class HashMap;
         void find_next_valid() {
-            if (m_overflow_it) {
-                // If the overflow iterator is at end \then done
-                if (*m_overflow_it == m_map->m_overflow->end()) {
-                    m_index = m_map->capacity();
-                    m_overflow_it.reset();
-                }
-                return;
-            }
-
             // Search primary table for next occupied slot where ctrl byte >= 0
             while (m_index < m_map->capacity()) {
                 if (m_map->m_ctrl[m_index] >= 0) {
@@ -752,17 +573,10 @@ class HashMap {
                 }
                 m_index++;
             }
-
-            // Finished with primary map, transition to overflow if it exists
-            if (m_map->m_overflow) {
-                m_overflow_it = std::make_unique<iterator_type>(m_map->m_overflow->begin());
-                find_next_valid();
-            }
         }
 
-        map_ptr m_map;                    // Pointer to map being iterated
-        size_t m_index;                   // Current index in primary bucket vector
-        overflow_iterator m_overflow_it;  // Iterator for overflow map
+        map_ptr m_map;   // Pointer to map being iterated
+        size_t m_index;  // Current index in primary bucket vector
     };
 };
 
