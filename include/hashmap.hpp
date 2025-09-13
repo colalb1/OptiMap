@@ -156,8 +156,6 @@ class HashMap {
 #endif
 
     FindResult find_slot(const Key& key) const {
-#if defined(__SSE2__) || (defined(_M_X64) || defined(_M_IX86))
-        // SIMD fast path
         const size_t full_hash = Hash{}(key);
         const int8_t hash2_val = h2(full_hash);
 
@@ -166,65 +164,45 @@ class HashMap {
         std::optional<size_t> first_deleted_slot;
 
         for (size_t offset = 0;; offset += kGroupWidth) {
-            const size_t current_index = (probe_start_index + offset) & (capacity() - 1);
-            Group group(&m_ctrl[current_index]);
+            // The index calculation happens once per group
+            const size_t group_start_index = (probe_start_index + offset) & (capacity() - 1);
+            Group group(&m_ctrl[group_start_index]);
 
-            // Check for potential h2 matches in the group
-            for (auto mask = group.match_h2(hash2_val); mask.has_next();) {
-                const size_t i = (current_index + mask.next()) & (capacity() - 1);
-
+            // Check for potential matches using the H2 hash
+            for (auto mask = group.match_h2(hash2_val); mask; mask.advance()) {
+                const size_t i = (group_start_index + mask.next()) & (capacity() - 1);
                 if (m_buckets[i].first == key) {
-                    return {i, true};
+                    return {i, true};  // Found the key.
                 }
             }
 
-            // Check for empty or deleted slots
-            auto empty_mask = group.match_empty_or_deleted();
+            // Check for an empty slot, which terminates the search
+            if (auto empty_mask = group.match_empty()) {
+                // The key is not in the map. Find the best insertion spot
+                const size_t empty_index =
+                    (group_start_index + empty_mask.next()) & (capacity() - 1);
 
-            // If there are any empty or deleted slots (mask != 0 means negative control bytes
-            // found)
-            if (empty_mask.mask != 0) {
-                for (auto mask = empty_mask; mask.has_next();) {
-                    size_t bit_pos = mask.next();
-                    const size_t i = (current_index + bit_pos) & (capacity() - 1);
-
-                    if (m_ctrl[i] == kEmpty) {
-                        return {first_deleted_slot.value_or(i), false};
-                    }
-                    if (!first_deleted_slot.has_value() && m_ctrl[i] == kDeleted) {
-                        first_deleted_slot = i;
-                    }
-                }
-
-                // If we only found deleted slots, return the first one
+                // If we've already seen a deleted slot, that's a better place to insert
                 if (first_deleted_slot.has_value()) {
                     return {first_deleted_slot.value(), false};
                 }
+
+                // Otherwise, the first empty slot is the insertion point.
+                return {empty_index, false};
+            }
+
+            // If we haven't terminated, scan for the first deleted slot in this group,
+            // but only if we haven't already found one in a previous group.
+            if (!first_deleted_slot.has_value()) {
+                if (auto empty_or_deleted_mask = group.match_empty_or_deleted()) {
+                    const size_t potential_deleted_index =
+                        (group_start_index + empty_or_deleted_mask.next()) & (capacity() - 1);
+                    if (m_ctrl[potential_deleted_index] == kDeleted) {
+                        first_deleted_slot = potential_deleted_index;
+                    }
+                }
             }
         }
-#else
-        // Scalar fallback path
-        const size_t full_hash = Hash{}(key);
-        const int8_t hash2_val = h2(full_hash);
-        size_t probe_start_index = h1(full_hash);
-
-        std::optional<size_t> first_deleted_slot;
-
-        for (size_t offset = 0;; ++offset) {
-            const size_t index = (probe_start_index + offset) & (capacity() - 1);
-            const int8_t ctrl_byte = m_ctrl[index];
-
-            if (ctrl_byte == hash2_val && m_buckets[index].first == key) {
-                return {index, true};
-            }
-            if (ctrl_byte == kEmpty) {
-                return {first_deleted_slot.value_or(index), false};
-            }
-            if (!first_deleted_slot.has_value() && ctrl_byte == kDeleted) {
-                first_deleted_slot = index;
-            }
-        }
-#endif
     }
 
     static size_t next_power_of_2(size_t n) {
