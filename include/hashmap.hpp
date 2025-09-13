@@ -155,6 +155,56 @@ class HashMap {
             return BitMask(_mm_movemask_epi8(ctrl));
         }
     };
+#else
+    // Helper for iterating over matches without SIMD.
+    struct BitMask {
+        uint32_t mask;
+
+        explicit BitMask(uint32_t m) : mask(m) {}
+
+        explicit operator bool() const { return mask != 0; }
+
+        int next() { return __builtin_ctz(mask); }
+
+        void advance() { mask &= (mask - 1); }
+    };
+
+    // Fallback implementation of Group for non-SSE2 builds.
+    struct Group {
+        const int8_t* ctrl;
+
+        explicit Group(const int8_t* p) : ctrl(p) {}
+
+        BitMask match_h2(int8_t hash) const {
+            uint32_t mask = 0;
+            for (int i = 0; i < kGroupWidth; ++i) {
+                if (ctrl[i] == hash) {
+                    mask |= (1 << i);
+                }
+            }
+            return BitMask(mask);
+        }
+
+        BitMask match_empty() const {
+            uint32_t mask = 0;
+            for (int i = 0; i < kGroupWidth; ++i) {
+                if (ctrl[i] == kEmpty) {
+                    mask |= (1 << i);
+                }
+            }
+            return BitMask(mask);
+        }
+
+        BitMask match_empty_or_deleted() const {
+            uint32_t mask = 0;
+            for (int i = 0; i < kGroupWidth; ++i) {
+                if (ctrl[i] < 0) {
+                    mask |= (1 << i);
+                }
+            }
+            return BitMask(mask);
+        }
+    };
 #endif
 
     FindResult find_slot(const Key& key) const {
