@@ -104,21 +104,26 @@ class HashMap {
     // Helper for iterating over matches from a SIMD bitmask.
     struct BitMask {
         uint32_t mask;
+
         explicit BitMask(uint32_t m) : mask(m) {}
 
-        bool has_next() const { return mask != 0; }
+        // Returns true if there are any bits set
+        explicit operator bool() const { return mask != 0; }
 
+        // Returns the index of the lowest set bit
+        // Assumes the mask is not empty
         int next() {
 #if defined(_MSC_VER)
             unsigned long i;
             _BitScanForward(&i, mask);
-#else
-            int i = __builtin_ctz(mask);
-#endif
-            // Clear lowest set bit
-            mask &= (mask - 1);
             return i;
+#else
+            return __builtin_ctz(mask);
+#endif
         }
+
+        // Advances to the next bit, clearing the one that was just processed
+        void advance() { mask &= (mask - 1); }
     };
 
     // Represents control group bytes loaded into a SIMD register
@@ -126,16 +131,27 @@ class HashMap {
         __m128i ctrl;
 
         explicit Group(const int8_t* p) {
+            // Use an unaligned load
             ctrl = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p));
         }
 
-        // Returns a bitmask of slots matching h2
+        // Returns a bitmask of slots that match the given H2 hash
         BitMask match_h2(int8_t hash) const {
             return BitMask(_mm_movemask_epi8(_mm_cmpeq_epi8(ctrl, _mm_set1_epi8(hash))));
         }
 
-        // Returns a bitmask of slots that are empty or deleted
-        BitMask match_empty_or_deleted() const { return BitMask(_mm_movemask_epi8(ctrl)); }
+        // Returns a bitmask of slots that are empty
+        // The termination condition for a probe sequence
+        BitMask match_empty() const {
+            return BitMask(_mm_movemask_epi8(_mm_cmpeq_epi8(ctrl, _mm_set1_epi8(kEmpty))));
+        }
+
+        // Returns a bitmask of slots that are empty OR deleted
+        // This is used to find a suitable slot for insertion
+        BitMask match_empty_or_deleted() const {
+            // Any control byte with the MSB set is either empty or deleted
+            return BitMask(_mm_movemask_epi8(ctrl));
+        }
     };
 #endif
 
