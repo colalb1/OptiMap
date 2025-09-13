@@ -9,6 +9,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "hash.hpp"
+
 #if defined(__SSE2__) || (defined(_M_X64) || defined(_M_IX86))
 #include <immintrin.h>
 #if defined(_MSC_VER)
@@ -70,7 +72,7 @@ struct AlignedAllocator {
 
 namespace optimap {
 
-template <typename Key, typename Value, typename Hash = std::hash<Key>>
+template <typename Key, typename Value, typename Hash = WyHash<Key>>
 class HashMap {
    public:
     struct Entry {
