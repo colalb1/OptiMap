@@ -282,38 +282,48 @@ class HashMap {
             auto old_buckets = std::move(m_buckets);
             auto old_size = m_size;
 
+            // Allocate new storage and initialize control bytes to kEmpty
             m_ctrl.assign(new_capacity * 2, kEmpty);
             m_buckets.resize(new_capacity);
-            m_size = 0;
+            m_size = 0;  // Size is 0 during re-insertion
 
+            // Iterate through old elements for direct re-insertion
             for (size_t i = 0; i < old_buckets.size(); ++i) {
+                // Skip empty or deleted slots
                 if (old_ctrl[i] >= 0) {
                     const auto& key = old_buckets[i].first;
+
+                    // Recalculate hash for the new table size
                     const size_t full_hash = Hash{}(key);
                     size_t probe_start_index = h1(full_hash);
 
+                    // Probe for an empty slot linearly
                     for (size_t offset = 0;; offset += kGroupWidth) {
                         const size_t group_start_index =
                             (probe_start_index + offset) & (capacity() - 1);
                         Group group(&m_ctrl[group_start_index]);
 
+                        // Find the first empty slot in the group
                         if (auto empty_mask = group.match_empty()) {
                             const size_t empty_index =
                                 (group_start_index + empty_mask.next()) & (capacity() - 1);
                             const int8_t hash2_val = h2(full_hash);
 
+                            // Directly place the element and its control byte
                             m_buckets[empty_index] = std::move(old_buckets[i]);
                             m_ctrl[empty_index] = hash2_val;
 
+                            // Update the sentinel for faster lookups
                             size_t sentinel_index = empty_index + capacity();
                             if (sentinel_index < m_ctrl.size()) {
                                 m_ctrl[sentinel_index] = hash2_val;
                             }
-                            break;
+                            break;  // Move to next element
                         }
                     }
                 }
             }
+            // Restore original size
             m_size = old_size;
         } catch (const std::exception& e) {
             throw std::runtime_error("HashMap resize failed: " + std::string(e.what()));
