@@ -9,7 +9,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include "hash.hpp"
+#include "gxhash.hpp"
 
 #if defined(__SSE2__) || (defined(_M_X64) || defined(_M_IX86))
 #include <immintrin.h>
@@ -72,7 +72,9 @@ struct AlignedAllocator {
 
 namespace optimap {
 
-template <typename Key, typename Value, typename Hash = WyHash<Key>>
+using namespace gxhash;
+
+template <typename Key, typename Value, typename Hash = GxHash<Key>>
 class HashMap {
    public:
     struct Entry {
