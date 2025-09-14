@@ -278,32 +278,44 @@ class HashMap {
         try {
             size_t new_capacity = (capacity() == 0) ? kGroupWidth : capacity() * 2;
 
-            // Create new vectors with increased capacity
-            std::vector<int8_t, AlignedAllocator<int8_t, kCacheLineSize>> new_ctrl(new_capacity * 2,
-                                                                                   kEmpty);
-            std::vector<Entry, AlignedAllocator<Entry, kCacheLineSize>> new_buckets(new_capacity);
-
-            // Temporarily store old data
             auto old_ctrl = std::move(m_ctrl);
             auto old_buckets = std::move(m_buckets);
             auto old_size = m_size;
 
-            // Assign new vectors to member variables
-            m_ctrl = std::move(new_ctrl);
-            m_buckets = std::move(new_buckets);
+            m_ctrl.assign(new_capacity * 2, kEmpty);
+            m_buckets.resize(new_capacity);
             m_size = 0;
 
-            // Re-insert elements from the old primary table
             for (size_t i = 0; i < old_buckets.size(); ++i) {
-                // If slot was occupied
                 if (old_ctrl[i] >= 0) {
-                    emplace(std::move(old_buckets[i].first), std::move(old_buckets[i].second));
+                    const auto& key = old_buckets[i].first;
+                    const size_t full_hash = Hash{}(key);
+                    size_t probe_start_index = h1(full_hash);
+
+                    for (size_t offset = 0;; offset += kGroupWidth) {
+                        const size_t group_start_index =
+                            (probe_start_index + offset) & (capacity() - 1);
+                        Group group(&m_ctrl[group_start_index]);
+
+                        if (auto empty_mask = group.match_empty()) {
+                            const size_t empty_index =
+                                (group_start_index + empty_mask.next()) & (capacity() - 1);
+                            const int8_t hash2_val = h2(full_hash);
+
+                            m_buckets[empty_index] = std::move(old_buckets[i]);
+                            m_ctrl[empty_index] = hash2_val;
+
+                            size_t sentinel_index = empty_index + capacity();
+                            if (sentinel_index < m_ctrl.size()) {
+                                m_ctrl[sentinel_index] = hash2_val;
+                            }
+                            break;
+                        }
+                    }
                 }
             }
-
             m_size = old_size;
         } catch (const std::exception& e) {
-            // Handle any exceptions during resize
             throw std::runtime_error("HashMap resize failed: " + std::string(e.what()));
         }
     }
@@ -340,8 +352,21 @@ class HashMap {
     // Copy/move constructors and assignment operators
     HashMap(const HashMap& other) = default;
     HashMap& operator=(const HashMap& other) = default;
-    HashMap(HashMap&& other) noexcept = default;
-    HashMap& operator=(HashMap&& other) noexcept = default;
+    HashMap(HashMap&& other) noexcept
+        : m_ctrl(std::move(other.m_ctrl)),
+          m_buckets(std::move(other.m_buckets)),
+          m_size(other.m_size) {
+        other.m_size = 0;
+    }
+    HashMap& operator=(HashMap&& other) noexcept {
+        if (this != &other) {
+            m_ctrl = std::move(other.m_ctrl);
+            m_buckets = std::move(other.m_buckets);
+            m_size = other.m_size;
+            other.m_size = 0;
+        }
+        return *this;
+    }
 
     template <typename K, typename V>
     bool emplace(K&& key, V&& value) {
