@@ -213,47 +213,67 @@ class HashMap {
 
         size_t probe_start_index = h1(full_hash);
 
+        // Will hold the index of the first deleted slot
         std::optional<size_t> first_deleted_slot;
 
         for (size_t offset = 0;; offset += kGroupWidth) {
             // The index calculation happens once per group
             const size_t group_start_index = (probe_start_index + offset) & (capacity() - 1);
+
+#if defined(__SSE2__) || (defined(_M_X64) || defined(_M_IX86))
             Group group(&m_ctrl[group_start_index]);
 
-            // Check for potential matches using the H2 hash
-            for (auto mask = group.match_h2(hash2_val); mask; mask.advance()) {
-                const size_t i = (group_start_index + mask.next()) & (capacity() - 1);
-                if (m_buckets[i].first == key) {
-                    return {i, true};  // Found the key.
+            // Check for a direct match
+            for (auto mask = group.match_h2(hash2_val); mask.has_next();) {
+                const size_t index = (group_start_index + mask.next()) & (capacity() - 1);
+                // The h2 hash matched, now we do the expensive full key comparison.
+                if (m_buckets[index].first == key) {
+                    return {index, true};
                 }
             }
 
-            // Check for an empty slot, which terminates the search
-            if (auto empty_mask = group.match_empty()) {
-                // The key is not in the map. Find the best insertion spot
+            // Check for an empty slot to terminate the search
+            // Empty slot = the key is definitely not in the map
+            auto empty_mask = group.match_empty();
+            if (empty_mask.has_next()) {
                 const size_t empty_index =
                     (group_start_index + empty_mask.next()) & (capacity() - 1);
-
-                // If we've already seen a deleted slot, that's a better place to insert
-                if (first_deleted_slot.has_value()) {
-                    return {first_deleted_slot.value(), false};
-                }
-
-                // Otherwise, the first empty slot is the insertion point.
-                return {empty_index, false};
+                // Return the deleted slot if we found one,
+                // otherwise return this empty slot. This is the insertion point
+                return {first_deleted_slot.value_or(empty_index), false};
             }
 
-            // If we haven't terminated, scan for the first deleted slot in this group,
-            // but only if we haven't already found one in a previous group.
+            // Look for a deleted slot to remember
+            // This avoids repeatedly searching for deleted slots in every group
             if (!first_deleted_slot.has_value()) {
-                if (auto empty_or_deleted_mask = group.match_empty_or_deleted()) {
-                    const size_t potential_deleted_index =
-                        (group_start_index + empty_or_deleted_mask.next()) & (capacity() - 1);
-                    if (m_ctrl[potential_deleted_index] == kDeleted) {
-                        first_deleted_slot = potential_deleted_index;
+                auto deleted_mask = group.match_empty_or_deleted();
+                if (deleted_mask.has_next()) {
+                    const size_t index =
+                        (group_start_index + deleted_mask.next()) & (capacity() - 1);
+                    if (m_ctrl[index] == kDeleted) {
+                        first_deleted_slot = index;
                     }
                 }
             }
+#else
+            // Scalar fallback path (same logic, just one by one)
+            for (size_t i = 0; i < kGroupWidth; ++i) {
+                const size_t index = (group_start_index + i) & (capacity() - 1);
+                const int8_t ctrl_byte = m_ctrl[index];
+
+                if (ctrl_byte == hash2_val && m_buckets[index].first == key) {
+                    return {index, true};
+                }
+
+                if (ctrl_byte == kEmpty) {
+                    return {first_deleted_slot.value_or(index), false};
+                }
+
+                if (!first_deleted_slot.has_value() && ctrl_byte == kDeleted) {
+                    first_deleted_slot = index;
+                }
+            }
+#endif
         }
     }
 
