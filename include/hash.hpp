@@ -15,12 +15,12 @@
 #include <variant>
 #include <vector>
 
-// This is a C++ implementation of wyhash, based on the original C source.
+// This is a C++ implementation of wyhash, based on the original C source
 // https://github.com/wangyi-fudan/wyhash
 
 namespace wyhash {
 
-// Default secret values used by wyhash.
+// Default secret values used by wyhash
 static const uint64_t _wyp[4] = {0xa0761d6478bd642f, 0xe7037ed1a0b428db, 0x8ebc6af09c88c6e3,
                                  0x589965cc75374cc3};
 
@@ -45,21 +45,21 @@ static inline uint64_t _wymix(uint64_t A, uint64_t B) {
 #endif
 }
 
-// Reads 8 bytes from a pointer.
+// Reads 8 bytes from a pointer
 static inline uint64_t _wyr8(const uint8_t* p) {
     uint64_t v;
     memcpy(&v, p, 8);
     return v;
 }
 
-// Reads 4 bytes from a pointer.
+// Reads 4 bytes from a pointer
 static inline uint64_t _wyr4(const uint8_t* p) {
     uint32_t v;
     memcpy(&v, p, 4);
     return v;
 }
 
-// Main wyhash function, corrected to match the original C implementation.
+// Main wyhash function
 static inline uint64_t wyhash(const void* key, size_t len, uint64_t seed, const uint64_t* secret) {
     const uint8_t* p = (const uint8_t*)key;
     seed ^= _wymix(seed ^ secret[0], secret[1]);
@@ -77,6 +77,7 @@ static inline uint64_t wyhash(const void* key, size_t len, uint64_t seed, const 
         }
     } else {
         size_t i = len;
+
         if (i > 48) {
             uint64_t see1 = seed, see2 = seed;
             do {
@@ -111,8 +112,8 @@ inline void hash_combine(std::size_t& seed, const T& v) {
     seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 
-// A high-quality 64-bit integer mixer to improve distribution for integral types.
-// Based on the finalizer from MurmurHash3/splitmix64.
+// A high-quality 64-bit integer mixer to improve distribution for integral types
+// Based on the finalizer from MurmurHash3/splitmix64
 struct WyIntegerMixer {
     size_t operator()(uint64_t x) const noexcept {
         x ^= x >> 30;
@@ -124,12 +125,12 @@ struct WyIntegerMixer {
     }
 };
 
-// The primary template for WyHash, handling fundamental types with `if constexpr`.
+// The primary template for WyHash, handling fundamental types with `if constexpr`
 template <typename T>
 struct WyHash {
     size_t operator()(const T& key) const noexcept {
         if constexpr (std::is_integral_v<T>) {
-            // For integral types, use the integer mixer for better bit distribution.
+            // For integral types, use the integer mixer for better bit distribution
             return WyIntegerMixer{}(static_cast<uint64_t>(key));
         } else if constexpr (std::is_floating_point_v<T>) {
             // For floating-point types, hash their byte representation.
