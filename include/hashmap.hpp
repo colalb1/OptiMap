@@ -609,16 +609,59 @@ class HashMap {
     }
 
     Value& operator[](const Key& key) {
+        // Reuse find_slot to get the correct index for insertion or retrieval
+        if (m_size >= capacity() * 0.875) {
+            resize_and_rehash();
+        }
+
         const auto result = find_slot(key);
 
         if (result.found) {
             return m_buckets[result.index].second;
         }
 
-        // Key not found, insert a new element
-        emplace(key, Value{});
-        const auto new_result = find_slot(key);
-        return m_buckets[new_result.index].second;
+        // Key not found, insert new element at returned slot
+        const int8_t hash2_val = h2(Hash{}(key));
+
+        m_buckets[result.index] = {key, Value{}};
+        m_ctrl[result.index] = hash2_val;
+
+        // Update sentinel
+        size_t sentinel_index = result.index + capacity();
+
+        if (sentinel_index < m_ctrl.size()) {
+            m_ctrl[sentinel_index] = hash2_val;
+        }
+
+        m_size++;
+        return m_buckets[result.index].second;
+    }
+
+    Value& operator[](Key&& key) {
+        // Reuse find_slot to get correct index for insertion/retrieval
+        if (m_size >= capacity() * 0.875) {
+            resize_and_rehash();
+        }
+
+        const auto result = find_slot(key);
+        if (result.found) {
+            return m_buckets[result.index].second;
+        }
+
+        // Key not found, insert a new element at the returned slot
+        const int8_t hash2_val = h2(Hash{}(key));
+
+        m_buckets[result.index] = {std::move(key), Value{}};
+        m_ctrl[result.index] = hash2_val;
+
+        // Update sentinel
+        size_t sentinel_index = result.index + capacity();
+        if (sentinel_index < m_ctrl.size()) {
+            m_ctrl[sentinel_index] = hash2_val;
+        }
+
+        m_size++;
+        return m_buckets[result.index].second;
     }
 
     // For mutable and constant iterators
