@@ -128,6 +128,18 @@ class HashMap {
 
         // Advances to the next bit, clearing the one that was just processed
         void advance() { mask &= (mask - 1); }
+
+        // Returns the index of the lowest set bit
+        // Assumes the mask is not empty
+        static int ctzll(uint64_t n) {
+#if defined(_MSC_VER) && defined(_M_X64)
+            unsigned long i;
+            _BitScanForward64(&i, n);
+            return i;
+#else
+            return __builtin_ctzll(n);
+#endif
+        }
     };
 
     // Represents control group bytes loaded into a SIMD register
@@ -169,6 +181,16 @@ class HashMap {
         int next() { return __builtin_ctz(mask); }
 
         void advance() { mask &= (mask - 1); }
+
+        static int ctzll(uint64_t n) {
+#if defined(_MSC_VER) && defined(_M_X64)
+            unsigned long i;
+            _BitScanForward64(&i, n);
+            return i;
+#else
+            return __builtin_ctzll(n);
+#endif
+        }
     };
 
     // Fallback implementation of Group for non-SSE2 builds.
@@ -311,6 +333,7 @@ class HashMap {
             // Allocate new storage and initialize control bytes to kEmpty
             m_ctrl.assign(new_capacity * 2, kEmpty);
             m_buckets.resize(new_capacity);
+            m_group_mask.assign((new_capacity / kGroupWidth + 63) / 64, 0);
             m_size = 0;  // Size is 0 during re-insertion
 
             // Iterate through old elements for direct re-insertion
@@ -344,6 +367,10 @@ class HashMap {
                             if (sentinel_index < m_ctrl.size()) {
                                 m_ctrl[sentinel_index] = hash2_val;
                             }
+
+                            // Set the bit for the group
+                            const size_t group_index = empty_index / kGroupWidth;
+                            m_group_mask[group_index / 64] |= (UINT64_C(1) << (group_index % 64));
                             break;  // Move to next element
                         }
                     }
@@ -365,6 +392,7 @@ class HashMap {
     // Members
     std::vector<int8_t, AlignedAllocator<int8_t, kCacheLineSize>> m_ctrl;
     mutable std::vector<Entry, AlignedAllocator<Entry, kCacheLineSize>> m_buckets;
+    std::vector<uint64_t> m_group_mask;
     size_t m_size;
 
    public:
@@ -381,6 +409,7 @@ class HashMap {
 
                 // Allocate buckets
                 m_buckets.resize(initial_capacity);
+                m_group_mask.assign((initial_capacity / kGroupWidth + 63) / 64, 0);
             } catch (const std::bad_alloc& e) {
                 // Handle allocation failure
                 throw std::runtime_error("HashMap initialization failed: " + std::string(e.what()));
@@ -433,6 +462,9 @@ class HashMap {
         if (sentinel_index < m_ctrl.size()) {
             m_ctrl[sentinel_index] = hash2_val;
         }
+
+        const size_t group_index = result.index / kGroupWidth;
+        m_group_mask[group_index / 64] |= (UINT64_C(1) << (group_index % 64));
 
         m_size++;
 
@@ -527,6 +559,16 @@ class HashMap {
 
             m_size--;
 
+            // Check if the group is now empty and clear the bit if so
+            const size_t group_index = result.index / kGroupWidth;
+            const size_t group_start_index = group_index * kGroupWidth;
+
+            Group group(&m_ctrl[group_start_index]);
+
+            if ((~group.match_empty_or_deleted().mask & 0xFFFF) == 0) {
+                m_group_mask[group_index / 64] &= ~(UINT64_C(1) << (group_index % 64));
+            }
+
             return true;
         }
 
@@ -567,6 +609,7 @@ class HashMap {
         // Clear the buckets
         m_buckets.clear();
         m_buckets.resize(capacity());
+        std::fill(m_group_mask.begin(), m_group_mask.end(), 0);
 
         m_size = 0;
     }
@@ -640,6 +683,9 @@ class HashMap {
             m_ctrl[sentinel_index] = hash2_val;
         }
 
+        const size_t group_index = result.index / kGroupWidth;
+        m_group_mask[group_index / 64] |= (UINT64_C(1) << (group_index % 64));
+
         m_size++;
         return m_buckets[result.index].second;
     }
@@ -666,6 +712,9 @@ class HashMap {
         if (sentinel_index < m_ctrl.size()) {
             m_ctrl[sentinel_index] = hash2_val;
         }
+
+        const size_t group_index = result.index / kGroupWidth;
+        m_group_mask[group_index / 64] |= (UINT64_C(1) << (group_index % 64));
 
         m_size++;
         return m_buckets[result.index].second;
@@ -718,14 +767,58 @@ class HashMap {
 
        private:
         friend class HashMap;
+
         void find_next_valid() {
-            // Search primary table for next occupied slot where ctrl byte >= 0
-            while (m_index < m_map->capacity()) {
-                if (m_map->m_ctrl[m_index] >= 0) {
-                    return;  // Found a valid slot
-                }
-                m_index++;
+            if (m_index >= m_map->capacity()) {
+                return;
             }
+
+            size_t group_index = m_index / kGroupWidth;
+            const size_t capacity_in_groups = m_map->capacity() / kGroupWidth;
+
+            // Check current group from current index forward
+            Group group(&m_map->m_ctrl[group_index * kGroupWidth]);
+            uint32_t occupied_mask =
+                ~group.match_empty_or_deleted().mask & (0xFFFFFFFF << (m_index % kGroupWidth));
+
+            if (occupied_mask) {
+                m_index = group_index * kGroupWidth + BitMask(occupied_mask).next();
+                return;
+            }
+
+            // Search subsequent groups using bitmask
+            group_index++;
+
+            while (group_index < capacity_in_groups) {
+                size_t mask_word_index = group_index / 64;
+
+                if (mask_word_index >= m_map->m_group_mask.size()) {
+                    break;
+                }
+
+                uint64_t mask_word = m_map->m_group_mask[mask_word_index];
+
+                // Mask out groups before current one in this word
+                mask_word &= (~UINT64_C(0)) << (group_index % 64);
+
+                if (mask_word == 0) {
+                    // No groups in rest of this word, jump to next
+                    group_index = (mask_word_index + 1) * 64;
+                    continue;
+                }
+
+                // Find the first set bit (first non-empty group) in word
+                group_index = mask_word_index * 64 + BitMask::ctzll(mask_word);
+
+                // Find first occupied slot
+                Group first_group(&m_map->m_ctrl[group_index * kGroupWidth]);
+                occupied_mask = ~first_group.match_empty_or_deleted().mask;
+                m_index = group_index * kGroupWidth + BitMask(occupied_mask).next();
+                return;
+            }
+
+            // Exhausted all groups
+            m_index = m_map->capacity();
         }
 
         map_ptr m_map;   // Pointer to map being iterated
