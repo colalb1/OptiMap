@@ -210,6 +210,10 @@ class HashMap {
 #endif
 
     FindResult find_slot(const Key& key) const {
+        if (capacity() == 0) {
+            return {0, false};
+        }
+        
         const size_t full_hash = Hash{}(key);
         const int8_t hash2_val = h2(full_hash);
 
@@ -364,20 +368,23 @@ class HashMap {
     size_t m_size;
 
    public:
-    explicit HashMap(size_t capacity = 16) : m_size(0) {
-        // Ensure capacity is at least kGroupWidth and a power of 2
-        size_t initial_capacity = next_power_of_2(capacity < kGroupWidth ? kGroupWidth : capacity);
+    explicit HashMap(size_t capacity = 0) : m_size(0) {
+        if (capacity > 0) {
+            // Ensure capacity is at least kGroupWidth and a power of 2
+            size_t initial_capacity =
+                next_power_of_2(capacity < kGroupWidth ? kGroupWidth : capacity);
 
-        try {
-            // Allocate control bytes with enough space for sentinels
-            m_ctrl.resize(initial_capacity * 2);
-            std::fill(m_ctrl.begin(), m_ctrl.end(), kEmpty);
+            try {
+                // Allocate control bytes with enough space for sentinels
+                m_ctrl.resize(initial_capacity * 2);
+                std::fill(m_ctrl.begin(), m_ctrl.end(), kEmpty);
 
-            // Allocate buckets
-            m_buckets.resize(initial_capacity);
-        } catch (const std::bad_alloc& e) {
-            // Handle allocation failure
-            throw std::runtime_error("HashMap initialization failed: " + std::string(e.what()));
+                // Allocate buckets
+                m_buckets.resize(initial_capacity);
+            } catch (const std::bad_alloc& e) {
+                // Handle allocation failure
+                throw std::runtime_error("HashMap initialization failed: " + std::string(e.what()));
+            }
         }
     }
 
@@ -402,7 +409,7 @@ class HashMap {
 
     template <typename K, typename V>
     bool emplace(K&& key, V&& value) {
-        if (m_size >= capacity() * 0.875) {
+        if (capacity() == 0 || m_size >= capacity() * 0.875) {
             resize_and_rehash();
         }
 
@@ -610,7 +617,7 @@ class HashMap {
 
     Value& operator[](const Key& key) {
         // Reuse find_slot to get the correct index for insertion or retrieval
-        if (m_size >= capacity() * 0.875) {
+        if (capacity() == 0 || m_size >= capacity() * 0.875) {
             resize_and_rehash();
         }
 
@@ -638,8 +645,8 @@ class HashMap {
     }
 
     Value& operator[](Key&& key) {
-        // Reuse find_slot to get correct index for insertion/retrieval
-        if (m_size >= capacity() * 0.875) {
+        // Reuse find_slot to get the correct index for insertion or retrieval
+        if (capacity() == 0 || m_size >= capacity() * 0.875) {
             resize_and_rehash();
         }
 
