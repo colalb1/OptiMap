@@ -137,7 +137,7 @@ Here are the performance and memory usage benchmarks for OptiMap compared to `st
 </tr>
 </table>
 
-### Running Benchmarks
+### Build
 
 ```bash
 # Build the project
