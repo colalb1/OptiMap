@@ -231,77 +231,46 @@ class HashMap {
     };
 #endif
 
-    FindResult find_slot(const Key& key) const {
+    FindResult find_impl(const Key& key, size_t full_hash) const {
         if (capacity() == 0) {
             return {0, false};
         }
-        
-        const size_t full_hash = Hash{}(key);
+
         const int8_t hash2_val = h2(full_hash);
-
         size_t probe_start_index = h1(full_hash);
-
-        // Will hold the index of the first deleted slot
         std::optional<size_t> first_deleted_slot;
 
         for (size_t offset = 0;; offset += kGroupWidth) {
-            // The index calculation happens once per group
             const size_t group_start_index = (probe_start_index + offset) & (capacity() - 1);
-
-#if defined(__SSE2__) || (defined(_M_X64) || defined(_M_IX86))
             Group group(&m_ctrl[group_start_index]);
 
-            // Check for a direct match
-            for (auto mask = group.match_h2(hash2_val); mask.has_next();) {
-                const size_t index = (group_start_index + mask.next()) & (capacity() - 1);
-                // The h2 hash matched, now we do the expensive full key comparison.
+            // Combine match operations for efficiency
+            auto match_h2_mask = group.match_h2(hash2_val);
+            auto match_empty_mask = group.match_empty();
+
+            for (; match_h2_mask; match_h2_mask.advance()) {
+                const size_t index = (group_start_index + match_h2_mask.next()) & (capacity() - 1);
                 if (m_buckets[index].first == key) {
                     return {index, true};
                 }
             }
 
-            // Check for an empty slot to terminate the search
-            // Empty slot = the key is definitely not in the map
-            auto empty_mask = group.match_empty();
-            if (empty_mask.has_next()) {
+            if (match_empty_mask) {
                 const size_t empty_index =
-                    (group_start_index + empty_mask.next()) & (capacity() - 1);
-                // Return the deleted slot if we found one,
-                // otherwise return this empty slot. This is the insertion point
+                    (group_start_index + match_empty_mask.next()) & (capacity() - 1);
                 return {first_deleted_slot.value_or(empty_index), false};
             }
 
-            // Look for a deleted slot to remember
-            // This avoids repeatedly searching for deleted slots in every group
-            if (!first_deleted_slot.has_value()) {
-                auto deleted_mask = group.match_empty_or_deleted();
-                if (deleted_mask.has_next()) {
-                    const size_t index =
-                        (group_start_index + deleted_mask.next()) & (capacity() - 1);
+            if (!first_deleted_slot) {
+                auto match_deleted_mask = group.match_empty_or_deleted();
+                if (match_deleted_mask) {
+                     const size_t index =
+                        (group_start_index + match_deleted_mask.next()) & (capacity() - 1);
                     if (m_ctrl[index] == kDeleted) {
                         first_deleted_slot = index;
                     }
                 }
             }
-#else
-            // Scalar fallback path (same logic, just one by one)
-            for (size_t i = 0; i < kGroupWidth; ++i) {
-                const size_t index = (group_start_index + i) & (capacity() - 1);
-                const int8_t ctrl_byte = m_ctrl[index];
-
-                if (ctrl_byte == hash2_val && m_buckets[index].first == key) {
-                    return {index, true};
-                }
-
-                if (ctrl_byte == kEmpty) {
-                    return {first_deleted_slot.value_or(index), false};
-                }
-
-                if (!first_deleted_slot.has_value() && ctrl_byte == kDeleted) {
-                    first_deleted_slot = index;
-                }
-            }
-#endif
         }
     }
 
@@ -442,14 +411,15 @@ class HashMap {
             resize_and_rehash();
         }
 
-        const auto result = find_slot(key);
+        const size_t full_hash = Hash{}(key);
+        const auto result = find_impl(key, full_hash);
 
         if (result.found) {
             return false;  // Duplicate key
         }
 
         // Insert into the primary table
-        const int8_t hash2_val = h2(Hash{}(key));
+        const int8_t hash2_val = h2(full_hash);
 
         // Create a new Entry with the key and value
         m_buckets[result.index] = {std::forward<K>(key), std::forward<V>(value)};
@@ -506,7 +476,8 @@ class HashMap {
     };
 
     iterator find(const Key& key) {
-        const auto result = find_slot(key);
+        const size_t full_hash = Hash{}(key);
+        const auto result = find_impl(key, full_hash);
 
         if (result.found) {
             return iterator(this, result.index);
@@ -516,7 +487,8 @@ class HashMap {
     }
 
     const_iterator find(const Key& key) const {
-        const auto result = find_slot(key);
+        const size_t full_hash = Hash{}(key);
+        const auto result = find_impl(key, full_hash);
 
         if (result.found) {
             return const_iterator(this, result.index);
@@ -545,7 +517,8 @@ class HashMap {
     }
 
     bool erase(const Key& key) {
-        const auto result = find_slot(key);
+        const size_t full_hash = Hash{}(key);
+        const auto result = find_impl(key, full_hash);
 
         if (result.found) {
             m_ctrl[result.index] = kDeleted;
@@ -639,7 +612,8 @@ class HashMap {
     bool contains(const Key& key) const { return find(key) != end(); }
 
     Value& at(const Key& key) {
-        const auto result = find_slot(key);
+        const size_t full_hash = Hash{}(key);
+        const auto result = find_impl(key, full_hash);
 
         if (result.found) {
             return m_buckets[result.index].second;
@@ -649,7 +623,8 @@ class HashMap {
     }
 
     const Value& at(const Key& key) const {
-        const auto result = find_slot(key);
+        const size_t full_hash = Hash{}(key);
+        const auto result = find_impl(key, full_hash);
 
         if (result.found) {
             return m_buckets[result.index].second;
@@ -659,19 +634,20 @@ class HashMap {
     }
 
     Value& operator[](const Key& key) {
-        // Reuse find_slot to get the correct index for insertion or retrieval
+        // Reuse find_impl to get the correct index for insertion or retrieval
         if (capacity() == 0 || m_size >= capacity() * 0.875) {
             resize_and_rehash();
         }
 
-        const auto result = find_slot(key);
+        const size_t full_hash = Hash{}(key);
+        const auto result = find_impl(key, full_hash);
 
         if (result.found) {
             return m_buckets[result.index].second;
         }
 
         // Key not found, insert new element at returned slot
-        const int8_t hash2_val = h2(Hash{}(key));
+        const int8_t hash2_val = h2(full_hash);
 
         m_buckets[result.index] = {key, Value{}};
         m_ctrl[result.index] = hash2_val;
@@ -691,18 +667,19 @@ class HashMap {
     }
 
     Value& operator[](Key&& key) {
-        // Reuse find_slot to get the correct index for insertion or retrieval
+        // Reuse find_impl to get the correct index for insertion or retrieval
         if (capacity() == 0 || m_size >= capacity() * 0.875) {
             resize_and_rehash();
         }
 
-        const auto result = find_slot(key);
+        const size_t full_hash = Hash{}(key);
+        const auto result = find_impl(key, full_hash);
         if (result.found) {
             return m_buckets[result.index].second;
         }
 
         // Key not found, insert a new element at the returned slot
-        const int8_t hash2_val = h2(Hash{}(key));
+        const int8_t hash2_val = h2(full_hash);
 
         m_buckets[result.index] = {std::move(key), Value{}};
         m_ctrl[result.index] = hash2_val;
