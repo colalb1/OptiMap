@@ -87,15 +87,18 @@ class HashMap {
     };
 
    private:
-    // A group of 16 control bytes, the size of one SSE register.
+    // 16 control bytes = size of a SIMD register. Allows
+    // efficient, parallel operations on multiple slots simultaneously
     static constexpr size_t kGroupWidth = 16;
 
-    // Defines the CPU cache line size (64 bytes) for memory alignment
-    // Improves performance by preventing cache splits
+    // Aligns the hash map's internal storage to cache line boundary. Prevents
+    // single group of control bytes from splitting across two cache lines, significantly degrading
+    // performance
     static constexpr size_t kCacheLineSize = 64;
 
-    // Control bytes mark the state of a slot
-    // Negative values are special states; positive values (0-127) are h2 hashes
+    // Control bytes are used to mark the state of each slot in the map.
+    // Negative values indicate special empty or deleted states.
+    // Positive values (0-127) store the h2 hash (top 7 bits of full hash)
     static constexpr int8_t kEmpty = -128;  // 0b10000000
     static constexpr int8_t kDeleted = -2;  // 0b11111110
 
@@ -105,7 +108,8 @@ class HashMap {
     };
 
 #if defined(__SSE2__) || (defined(_M_X64) || defined(_M_IX86))
-    // Helper for iterating over matches from a SIMD bitmask.
+    // A wrapper around a SIMD bitmask. Provides iterator-like interface
+    // for efficiently finding the set bits, corresponding to matching slots
     struct BitMask {
         uint32_t mask;
 
@@ -142,7 +146,8 @@ class HashMap {
         }
     };
 
-    // Represents control group bytes loaded into a SIMD register
+    // Represents a group of 16 control bytes loaded into a SIMD register.
+    // This allows for parallel matching of h2 hashes and special states.
     struct Group {
         __m128i ctrl;
 
@@ -231,6 +236,9 @@ class HashMap {
     };
 #endif
 
+    // Core lookup function. SIMD-accelerated linear probing used to find
+    // correct slot for a key. Takes pre-computed hash to avoid
+    // redundant calculations
     FindResult find_impl(const Key& key, size_t full_hash) const {
         if (capacity() == 0) {
             return {0, false};
@@ -264,7 +272,7 @@ class HashMap {
             if (!first_deleted_slot) {
                 auto match_deleted_mask = group.match_empty_or_deleted();
                 if (match_deleted_mask) {
-                     const size_t index =
+                    const size_t index =
                         (group_start_index + match_deleted_mask.next()) & (capacity() - 1);
                     if (m_ctrl[index] == kDeleted) {
                         first_deleted_slot = index;
@@ -274,7 +282,7 @@ class HashMap {
         }
     }
 
-    static consteval size_t next_power_of_2(size_t n) {
+    static constexpr size_t next_power_of_2(size_t n) {
         if (n == 0) {
             return 1;
         }
@@ -292,63 +300,49 @@ class HashMap {
     }
 
     void resize_and_rehash() {
-        try {
-            size_t new_capacity = (capacity() == 0) ? kGroupWidth : capacity() * 2;
+        size_t new_capacity = (m_capacity == 0) ? kGroupWidth : m_capacity * 2;
 
-            auto old_ctrl = std::move(m_ctrl);
-            auto old_buckets = std::move(m_buckets);
-            auto old_size = m_size;
+        int8_t* old_ctrl = m_ctrl;
+        Entry* old_buckets = m_buckets;
+        size_t old_capacity = m_capacity;
 
-            // Allocate new storage and initialize control bytes to kEmpty
-            m_ctrl.assign(new_capacity * 2, kEmpty);
-            m_buckets.resize(new_capacity);
-            m_group_mask.assign((new_capacity / kGroupWidth + 63) / 64, 0);
-            m_size = 0;  // Size is 0 during re-insertion
+        allocate_and_initialize(new_capacity);
 
-            // Iterate through old elements for direct re-insertion
-            for (size_t i = 0; i < old_buckets.size(); ++i) {
-                // Skip empty or deleted slots
-                if (old_ctrl[i] >= 0) {
-                    const auto& key = old_buckets[i].first;
+        for (size_t i = 0; i < old_capacity; ++i) {
+            if (old_ctrl[i] >= 0) {
+                const auto& key = old_buckets[i].first;
+                const size_t full_hash = Hash{}(key);
+                size_t probe_start_index = h1(full_hash);
 
-                    // Recalculate hash for the new table size
-                    const size_t full_hash = Hash{}(key);
-                    size_t probe_start_index = h1(full_hash);
+                for (size_t offset = 0;; offset += kGroupWidth) {
+                    const size_t group_start_index =
+                        (probe_start_index + offset) & (m_capacity - 1);
+                    Group group(&m_ctrl[group_start_index]);
 
-                    // Probe for an empty slot linearly
-                    for (size_t offset = 0;; offset += kGroupWidth) {
-                        const size_t group_start_index =
-                            (probe_start_index + offset) & (capacity() - 1);
-                        Group group(&m_ctrl[group_start_index]);
+                    if (auto empty_mask = group.match_empty()) {
+                        const size_t empty_index =
+                            (group_start_index + empty_mask.next()) & (m_capacity - 1);
+                        const int8_t hash2_val = h2(full_hash);
 
-                        // Find the first empty slot in the group
-                        if (auto empty_mask = group.match_empty()) {
-                            const size_t empty_index =
-                                (group_start_index + empty_mask.next()) & (capacity() - 1);
-                            const int8_t hash2_val = h2(full_hash);
+                        new (&m_buckets[empty_index]) Entry(std::move(old_buckets[i]));
+                        m_ctrl[empty_index] = hash2_val;
 
-                            // Directly place the element and its control byte
-                            m_buckets[empty_index] = std::move(old_buckets[i]);
-                            m_ctrl[empty_index] = hash2_val;
-
-                            // Update the sentinel for faster lookups
-                            size_t sentinel_index = empty_index + capacity();
-                            if (sentinel_index < m_ctrl.size()) {
-                                m_ctrl[sentinel_index] = hash2_val;
-                            }
-
-                            // Set the bit for the group
-                            const size_t group_index = empty_index / kGroupWidth;
-                            m_group_mask[group_index / 64] |= (UINT64_C(1) << (group_index % 64));
-                            break;  // Move to next element
+                        size_t sentinel_index = empty_index + m_capacity;
+                        if (sentinel_index < m_capacity + kGroupWidth) {
+                            m_ctrl[sentinel_index] = hash2_val;
                         }
+
+                        const size_t group_index = empty_index / kGroupWidth;
+                        m_group_mask[group_index / 64] |= (UINT64_C(1) << (group_index % 64));
+                        break;
                     }
                 }
             }
-            // Restore original size
-            m_size = old_size;
-        } catch (const std::exception& e) {
-            throw std::runtime_error("HashMap resize failed: " + std::string(e.what()));
+        }
+
+        if (old_ctrl) {
+            AlignedAllocator<char, kCacheLineSize>().deallocate(reinterpret_cast<char*>(old_ctrl),
+                                                                0);
         }
     }
 
@@ -358,49 +352,133 @@ class HashMap {
         return static_cast<int8_t>(hash >> (sizeof(size_t) * 8 - 7));
     }
 
-    // Members
-    std::vector<int8_t, AlignedAllocator<int8_t, kCacheLineSize>> m_ctrl;
-    mutable std::vector<Entry, AlignedAllocator<Entry, kCacheLineSize>> m_buckets;
-    std::vector<uint64_t> m_group_mask;
-    size_t m_size;
+    // Hash map data is stored in a single contiguous memory block to
+    // improve cache locality and reduce allocation overhead. The block is
+    // partitioned into three sections:
+    //
+    // m_ctrl: array of control bytes
+    // m_buckets: array of key-value pairs (Entry)
+    // m_group_mask: bitmask used to quickly skip over empty groups during iteration
+    int8_t* m_ctrl = nullptr;
+    Entry* m_buckets = nullptr;
+    uint64_t* m_group_mask = nullptr;
+    size_t m_size = 0;
+    size_t m_capacity = 0;
+
+    void allocate_and_initialize(size_t new_capacity) {
+        if (new_capacity == 0) {
+            return;
+        }
+
+        size_t ctrl_bytes = new_capacity + kGroupWidth;
+        size_t buckets_bytes = new_capacity * sizeof(Entry);
+        size_t group_mask_bytes = (new_capacity / kGroupWidth + 63) / 64 * sizeof(uint64_t);
+
+        size_t total_bytes = ctrl_bytes + buckets_bytes + group_mask_bytes;
+
+        void* allocation = AlignedAllocator<char, kCacheLineSize>().allocate(total_bytes);
+
+        m_ctrl = static_cast<int8_t*>(allocation);
+        m_buckets = reinterpret_cast<Entry*>(static_cast<char*>(allocation) + ctrl_bytes);
+        m_group_mask = reinterpret_cast<uint64_t*>(static_cast<char*>(allocation) + ctrl_bytes +
+                                                   buckets_bytes);
+
+        std::fill(m_ctrl, m_ctrl + ctrl_bytes, kEmpty);
+        std::fill(m_group_mask, m_group_mask + (new_capacity / kGroupWidth + 63) / 64, 0);
+
+        m_capacity = new_capacity;
+    }
+
+    void destroy_and_deallocate() {
+        if (m_ctrl) {
+            for (size_t i = 0; i < m_capacity; ++i) {
+                if (m_ctrl[i] >= 0) {
+                    m_buckets[i].~Entry();
+                }
+            }
+            AlignedAllocator<char, kCacheLineSize>().deallocate(reinterpret_cast<char*>(m_ctrl), 0);
+            m_ctrl = nullptr;
+            m_buckets = nullptr;
+            m_group_mask = nullptr;
+            m_capacity = 0;
+            m_size = 0;
+        }
+    }
 
    public:
-    explicit HashMap(size_t capacity = 0) : m_size(0) {
+    explicit HashMap(size_t capacity = 0) {
         if (capacity > 0) {
-            // Ensure capacity is at least kGroupWidth and a power of 2
             size_t initial_capacity =
                 next_power_of_2(capacity < kGroupWidth ? kGroupWidth : capacity);
+            allocate_and_initialize(initial_capacity);
+        }
+    }
 
-            try {
-                // Allocate control bytes with enough space for sentinels
-                m_ctrl.resize(initial_capacity * 2);
-                std::fill(m_ctrl.begin(), m_ctrl.end(), kEmpty);
+    ~HashMap() { destroy_and_deallocate(); }
 
-                // Allocate buckets
-                m_buckets.resize(initial_capacity);
-                m_group_mask.assign((initial_capacity / kGroupWidth + 63) / 64, 0);
-            } catch (const std::bad_alloc& e) {
-                // Handle allocation failure
-                throw std::runtime_error("HashMap initialization failed: " + std::string(e.what()));
+    // Copy/move constructors and assignment operators
+    HashMap(const HashMap& other) {
+        if (other.m_capacity > 0) {
+            allocate_and_initialize(other.m_capacity);
+            m_size = other.m_size;
+            std::copy(other.m_ctrl, other.m_ctrl + other.m_capacity + kGroupWidth, m_ctrl);
+            std::copy(other.m_group_mask,
+                      other.m_group_mask + (other.m_capacity / kGroupWidth + 63) / 64,
+                      m_group_mask);
+            for (size_t i = 0; i < other.m_capacity; ++i) {
+                if (other.m_ctrl[i] >= 0) {
+                    new (&m_buckets[i]) Entry(other.m_buckets[i]);
+                }
             }
         }
     }
 
-    // Copy/move constructors and assignment operators
-    HashMap(const HashMap& other) = default;
-    HashMap& operator=(const HashMap& other) = default;
-    HashMap(HashMap&& other) noexcept
-        : m_ctrl(std::move(other.m_ctrl)),
-          m_buckets(std::move(other.m_buckets)),
-          m_size(other.m_size) {
-        other.m_size = 0;
+    HashMap& operator=(const HashMap& other) {
+        if (this != &other) {
+            destroy_and_deallocate();
+            if (other.m_capacity > 0) {
+                allocate_and_initialize(other.m_capacity);
+                m_size = other.m_size;
+                std::copy(other.m_ctrl, other.m_ctrl + other.m_capacity + kGroupWidth, m_ctrl);
+                std::copy(other.m_group_mask,
+                          other.m_group_mask + (other.m_capacity / kGroupWidth + 63) / 64,
+                          m_group_mask);
+                for (size_t i = 0; i < other.m_capacity; ++i) {
+                    if (other.m_ctrl[i] >= 0) {
+                        new (&m_buckets[i]) Entry(other.m_buckets[i]);
+                    }
+                }
+            }
+        }
+        return *this;
     }
+
+    HashMap(HashMap&& other) noexcept
+        : m_ctrl(other.m_ctrl),
+          m_buckets(other.m_buckets),
+          m_group_mask(other.m_group_mask),
+          m_size(other.m_size),
+          m_capacity(other.m_capacity) {
+        other.m_ctrl = nullptr;
+        other.m_buckets = nullptr;
+        other.m_group_mask = nullptr;
+        other.m_size = 0;
+        other.m_capacity = 0;
+    }
+
     HashMap& operator=(HashMap&& other) noexcept {
         if (this != &other) {
-            m_ctrl = std::move(other.m_ctrl);
-            m_buckets = std::move(other.m_buckets);
+            destroy_and_deallocate();
+            m_ctrl = other.m_ctrl;
+            m_buckets = other.m_buckets;
+            m_group_mask = other.m_group_mask;
             m_size = other.m_size;
+            m_capacity = other.m_capacity;
+            other.m_ctrl = nullptr;
+            other.m_buckets = nullptr;
+            other.m_group_mask = nullptr;
             other.m_size = 0;
+            other.m_capacity = 0;
         }
         return *this;
     }
@@ -429,7 +507,7 @@ class HashMap {
 
         // Update sentinel if within bounds
         size_t sentinel_index = result.index + capacity();
-        if (sentinel_index < m_ctrl.size()) {
+        if (sentinel_index < capacity() + kGroupWidth) {
             m_ctrl[sentinel_index] = hash2_val;
         }
 
@@ -510,9 +588,9 @@ class HashMap {
             return end();
         }
         erase(it->first);
-        // This is tricky, as we need to return a non-const iterator.
-        // For now, we'll just return end(). A better implementation
-        // would be to find the next element and return an iterator to it.
+        // Need to return a non-const iterator. Just return end() for now. Better implementation
+        // would find the next element and return an iterator to it. I'm dumb and lazy so that's not
+        // getting fixed right now. Hopefully I remember to come back to this.
         return end();
     }
 
@@ -526,7 +604,7 @@ class HashMap {
             // Update sentinel if within bounds
             size_t sentinel_index = result.index + capacity();
 
-            if (sentinel_index < m_ctrl.size()) {
+            if (sentinel_index < capacity() + kGroupWidth) {
                 m_ctrl[sentinel_index] = kDeleted;
             }
 
@@ -573,17 +651,11 @@ class HashMap {
     }
 
     size_t size() const { return m_size; }
-    size_t capacity() const { return m_buckets.size(); }
+    size_t capacity() const { return m_capacity; }
 
     void clear() {
-        // Reset all control bytes to kEmpty
-        std::fill(m_ctrl.begin(), m_ctrl.end(), kEmpty);
-
-        // Clear the buckets
-        m_buckets.clear();
-        m_buckets.resize(capacity());
-        std::fill(m_group_mask.begin(), m_group_mask.end(), 0);
-
+        destroy_and_deallocate();
+        allocate_and_initialize(m_capacity);
         m_size = 0;
     }
 
@@ -655,7 +727,7 @@ class HashMap {
         // Update sentinel
         size_t sentinel_index = result.index + capacity();
 
-        if (sentinel_index < m_ctrl.size()) {
+        if (sentinel_index < capacity() + kGroupWidth) {
             m_ctrl[sentinel_index] = hash2_val;
         }
 
@@ -686,7 +758,7 @@ class HashMap {
 
         // Update sentinel
         size_t sentinel_index = result.index + capacity();
-        if (sentinel_index < m_ctrl.size()) {
+        if (sentinel_index < capacity() + kGroupWidth) {
             m_ctrl[sentinel_index] = hash2_val;
         }
 
@@ -769,7 +841,7 @@ class HashMap {
             while (group_index < capacity_in_groups) {
                 size_t mask_word_index = group_index / 64;
 
-                if (mask_word_index >= m_map->m_group_mask.size()) {
+                if (mask_word_index >= (m_map->capacity() / kGroupWidth + 63) / 64) {
                     break;
                 }
 
