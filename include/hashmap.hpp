@@ -250,7 +250,7 @@ class HashMap {
 
             for (; match_h2_mask; match_h2_mask.advance()) {
                 const size_t index = (group_start_index + match_h2_mask.next()) & (capacity() - 1);
-                if (m_buckets[index].first == key) {
+                if (m_buckets[index].first == key) [[likely]] {
                     return {index, true};
                 }
             }
@@ -274,7 +274,7 @@ class HashMap {
         }
     }
 
-    static size_t next_power_of_2(size_t n) {
+    static consteval size_t next_power_of_2(size_t n) {
         if (n == 0) {
             return 1;
         }
@@ -407,7 +407,7 @@ class HashMap {
 
     template <typename K, typename V>
     bool emplace(K&& key, V&& value) {
-        if (capacity() == 0 || m_size >= capacity() * 0.875) {
+        if (capacity() == 0 || m_size >= capacity() * 0.875) [[unlikely]] {
             resize_and_rehash();
         }
 
@@ -520,7 +520,7 @@ class HashMap {
         const size_t full_hash = Hash{}(key);
         const auto result = find_impl(key, full_hash);
 
-        if (result.found) {
+        if (result.found) [[likely]] {
             m_ctrl[result.index] = kDeleted;
 
             // Update sentinel if within bounds
@@ -635,7 +635,7 @@ class HashMap {
 
     Value& operator[](const Key& key) {
         // Reuse find_impl to get the correct index for insertion or retrieval
-        if (capacity() == 0 || m_size >= capacity() * 0.875) {
+        if (capacity() == 0 || m_size >= capacity() * 0.875) [[unlikely]] {
             resize_and_rehash();
         }
 
@@ -668,7 +668,7 @@ class HashMap {
 
     Value& operator[](Key&& key) {
         // Reuse find_impl to get the correct index for insertion or retrieval
-        if (capacity() == 0 || m_size >= capacity() * 0.875) {
+        if (capacity() == 0 || m_size >= capacity() * 0.875) [[unlikely]] {
             resize_and_rehash();
         }
 
