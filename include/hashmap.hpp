@@ -825,49 +825,56 @@ class HashMap {
             size_t group_index = m_index / kGroupWidth;
             const size_t capacity_in_groups = m_map->capacity() / kGroupWidth;
 
-            // Check current group from current index forward
+            // Check current group from m_index onwards
             Group group(&m_map->m_ctrl[group_index * kGroupWidth]);
-            uint32_t occupied_mask =
-                ~group.match_empty_or_deleted().mask & (0xFFFFFFFF << (m_index % kGroupWidth));
+            // Get mask of occupied slots
+            uint32_t occupied_mask = ~group.match_empty_or_deleted().mask;
+            // Mask out bits before current index
+            occupied_mask &= (0xFFFFFFFF << (m_index % kGroupWidth));
 
             if (occupied_mask) {
                 m_index = group_index * kGroupWidth + BitMask(occupied_mask).next();
                 return;
             }
 
-            // Search subsequent groups using bitmask
+            // Search subsequent groups using group mask
             group_index++;
-
-            while (group_index < capacity_in_groups) {
-                size_t mask_word_index = group_index / 64;
-
-                if (mask_word_index >= (m_map->capacity() / kGroupWidth + 63) / 64) {
-                    break;
-                }
-
-                uint64_t mask_word = m_map->m_group_mask[mask_word_index];
-
-                // Mask out groups before current one in this word
-                mask_word &= (~UINT64_C(0)) << (group_index % 64);
-
-                if (mask_word == 0) {
-                    // No groups in rest of this word, jump to next
-                    group_index = (mask_word_index + 1) * 64;
-                    continue;
-                }
-
-                // Find the first set bit (first non-empty group) in word
-                group_index = mask_word_index * 64 + BitMask::ctzll(mask_word);
-
-                // Find first occupied slot
-                Group first_group(&m_map->m_ctrl[group_index * kGroupWidth]);
-                occupied_mask = ~first_group.match_empty_or_deleted().mask;
-                m_index = group_index * kGroupWidth + BitMask(occupied_mask).next();
+            
+            if (group_index >= capacity_in_groups) {
+                m_index = m_map->capacity();
                 return;
             }
 
-            // Exhausted all groups
-            m_index = m_map->capacity();
+            size_t mask_word_index = group_index / 64;
+
+            // Process first (potentially partial) mask word
+            uint64_t mask_word = m_map->m_group_mask[mask_word_index];
+            mask_word &= (~UINT64_C(0)) << (group_index % 64);
+
+            while (true) {
+                if (mask_word != 0) {
+                    // Found a non-empty group in the current word
+                    group_index = mask_word_index * 64 + BitMask::ctzll(mask_word);
+                    Group first_group(&m_map->m_ctrl[group_index * kGroupWidth]);
+
+                    occupied_mask = ~first_group.match_empty_or_deleted().mask;
+                    m_index = group_index * kGroupWidth + BitMask(occupied_mask).next();
+
+                    return;
+                }
+
+                // Move to next mask word
+                mask_word_index++;
+                const size_t num_mask_words = (capacity_in_groups + 63) / 64;
+                
+                if (mask_word_index >= num_mask_words) {
+                    // No more groups
+                    m_index = m_map->capacity();
+
+                    return;
+                }
+                mask_word = m_map->m_group_mask[mask_word_index];
+            }
         }
 
         map_ptr m_map;   // Pointer to map being iterated
