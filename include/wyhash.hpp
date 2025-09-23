@@ -26,7 +26,7 @@ static const uint64_t _wyp[4] = {0xa0761d6478bd642f, 0xe7037ed1a0b428db, 0x8ebc6
 
 // Multiplies two 64-bit integers and returns the XOR of the high and low 128-bit parts
 // This is the core mixing operation of wyhash
-static inline uint64_t _wymix(uint64_t A, uint64_t B) {
+__attribute__((always_inline)) static inline uint64_t _wymix(uint64_t A, uint64_t B) {
 #if defined(__SIZEOF_INT128__)
     __uint128_t r = (__uint128_t)A * B;
     return (uint64_t)r ^ (uint64_t)(r >> 64);
@@ -46,14 +46,14 @@ static inline uint64_t _wymix(uint64_t A, uint64_t B) {
 }
 
 // Reads 8 bytes from a pointer
-static inline uint64_t _wyr8(const uint8_t* p) {
+__attribute__((always_inline)) static inline uint64_t _wyr8(const uint8_t* p) {
     uint64_t v;
     memcpy(&v, p, 8);
     return v;
 }
 
 // Reads 4 bytes from a pointer
-static inline uint64_t _wyr4(const uint8_t* p) {
+__attribute__((always_inline)) static inline uint64_t _wyr4(const uint8_t* p) {
     uint32_t v;
     memcpy(&v, p, 4);
     return v;
