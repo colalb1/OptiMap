@@ -818,7 +818,7 @@ class HashMap {
         friend class HashMap;
 
         void find_next_valid() {
-            if (m_index >= m_map->capacity()) {
+            if (m_index >= m_map->capacity()) [[unlikely]] {
                 return;
             }
 
@@ -832,15 +832,14 @@ class HashMap {
             // Mask out bits before current index
             occupied_mask &= (0xFFFFFFFF << (m_index % kGroupWidth));
 
-            if (occupied_mask) {
+            if (occupied_mask) [[likely]] {
                 m_index = group_index * kGroupWidth + BitMask(occupied_mask).next();
                 return;
             }
 
             // Search subsequent groups using group mask
             group_index++;
-            
-            if (group_index >= capacity_in_groups) {
+            if (group_index >= capacity_in_groups) [[unlikely]] {
                 m_index = m_map->capacity();
                 return;
             }
@@ -852,7 +851,7 @@ class HashMap {
             mask_word &= (~UINT64_C(0)) << (group_index % 64);
 
             while (true) {
-                if (mask_word != 0) {
+                if (mask_word != 0) [[likely]] {
                     // Found a non-empty group in the current word
                     group_index = mask_word_index * 64 + BitMask::ctzll(mask_word);
                     Group first_group(&m_map->m_ctrl[group_index * kGroupWidth]);
@@ -866,8 +865,7 @@ class HashMap {
                 // Move to next mask word
                 mask_word_index++;
                 const size_t num_mask_words = (capacity_in_groups + 63) / 64;
-                
-                if (mask_word_index >= num_mask_words) {
+                if (mask_word_index >= num_mask_words) [[unlikely]] {
                     // No more groups
                     m_index = m_map->capacity();
 
