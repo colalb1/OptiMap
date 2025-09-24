@@ -61,14 +61,6 @@ Here are the performance and memory usage benchmarks for OptiMap compared to `st
 <br>
 <img src="plots/RandomFindString_performance.png" width="80%">
 
-**RandomInsertErase Performance**
-<br>
-<img src="plots/RandomInsertErase_performance.png" width="80%">
-
-**RandomInsertEraseStrings Performance**
-<br>
-<img src="plots/RandomInsertEraseStrings_performance.png" width="80%">
-
 </div>
 </details>
 </td>
@@ -122,14 +114,6 @@ Here are the performance and memory usage benchmarks for OptiMap compared to `st
 **RandomFindString Memory**
 <br>
 <img src="plots/RandomFindString_memory.png" width="80%">
-
-**RandomInsertErase Memory**
-<br>
-<img src="plots/RandomInsertErase_memory.png" width="80%">
-
-**RandomInsertEraseStrings Memory**
-<br>
-<img src="plots/RandomInsertEraseStrings_memory.png" width="80%">
 
 </div>
 </details>
