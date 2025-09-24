@@ -1,16 +1,17 @@
 # OptimMap: A SIMD-accelerated, Cache-Optimized C++ Hash Map
 
-`optimap` is a high-performance, open-addressing hash map for C++ that implements the Swiss Table design pattern. It leverages a memory layout friendly to modern CPUs and SIMD instructions for accelerated lookups.
+`optimap` is a high-performance, open-addressing hash map for C++ that implements the [Swiss Table design pattern](https://abseil.io/about/design/swisstables). It leverages a memory layout friendly to modern CPUs and SIMD instructions for accelerated lookups.
 
 This document details design choices, performance optimizations, and lessons learned during the development of `optimap`.
 
 ## Concept & Architecture
 
-The core idea behind `optimap` is to build a hash map that works in harmony with the underlying hardware. It follows the principles of **Data-Oriented Design** to minimize cache misses and maximize CPU instruction throughput.
+[Data-oriented design principles](https://en.wikipedia.org/wiki/Data-oriented_design) are used to minimize cache misses and minimize CPU instruction throughput.
 
+<!-- go into more technical depth on the swiss table design -->
 -   **Open-Addressing with Swiss Table Design**: `optimap` is an open-addressing hash map that uses linear probing. It is based on the "Swiss Table" design, which is renowned for its performance. This approach avoids the pointer chasing inherent in chaining-based maps, resulting in a more predictable and efficient memory access pattern.
 
--   **Custom High-Performance Hash Function**: The map is paired with `gxhash`, a custom hashing algorithm developed specifically for this project. `gxhash` features a hardware-accelerated path using **AES-NI CPU instructions**, ensuring extremely fast and high-quality hash generation. This minimizes collisions, which is the first and most critical step for fast hash map operations.
+-   **Custom High-Performance Hash Function**: [Oliver Giniaux](https://ogxd.github.io/) wrote [the original implementation](https://github.com/ogxd/gxhash) in Rust. I wrote it in C++.`gxhash` features a hardware-accelerated path using [AES-NI CPU instructions](https://en.wikipedia.org/wiki/AES_instruction_set), ensuring fast hash generation that minimizes collisions.
 
 ## Differentiators & Performance Optimizations
 
