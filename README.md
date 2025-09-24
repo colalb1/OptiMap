@@ -1,134 +1,65 @@
-# OptiMap
-Cache-aware C++ map optimized for speed and efficiency.
+# optimap: A SIMD-accelerated, Cache-Optimized C++ Hash Map
 
-### Prerequisites
-- CMake 4.0 or higher
-- A C++23 compatible compiler
+`optimap` is a high-performance, open-addressing hash map for C++ that implements the Swiss Table design pattern. It is designed from the ground up for exceptional performance by leveraging a memory layout friendly to modern CPUs and SIMD instructions for accelerated lookups.
 
-## Benchmarks
-Here are the performance and memory usage benchmarks for OptiMap compared to `std::unordered_map` and `ankerl::unordered_dense::map`. `std::unordered_map` and `ankerl::unordered_dense::map` use various hash functions while OptiMap uses its own proprietary hash function.
+This document details the key design choices, performance optimizations, and lessons learned during the development of `optimap`.
 
-<table>
-<tr>
-<td valign="top">
-<details>
-<summary><strong>Performance Results</strong></summary>
-<br>
-<em>Speed of various operations. Lower is better.</em>
-<div align="center">
+## 1. Core Concept & Architecture
 
-**Copy Performance**
-<br>
-<img src="plots/Copy_performance.png" width="80%">
+The core idea behind `optimap` is to build a hash map that works in harmony with the underlying hardware. It follows the principles of **Data-Oriented Design** to minimize cache misses and maximize CPU instruction throughput.
 
-**CtorDtorEmptyMap Performance**
-<br>
-<img src="plots/CtorDtorEmptyMap_performance.png" width="80%">
+-   **Open-Addressing with Swiss Table Design**: `optimap` is an open-addressing hash map that uses linear probing. It is based on the "Swiss Table" design, which is renowned for its performance. This approach avoids the pointer chasing inherent in chaining-based maps, resulting in a more predictable and efficient memory access pattern.
 
-**CtorDtorSingleEntryMap Performance**
-<br>
-<img src="plots/CtorDtorSingleEntryMap_performance.png" width="80%">
+-   **Custom High-Performance Hash Function**: The map is paired with `gxhash`, a custom hashing algorithm developed specifically for this project. `gxhash` features a hardware-accelerated path using **AES-NI CPU instructions**, ensuring extremely fast and high-quality hash generation. This minimizes collisions, which is the first and most critical step for fast hash map operations.
 
-**InsertHugeInt Performance**
-<br>
-<img src="plots/InsertHugeInt_performance.png" width="80%">
+## 2. Key Differentiators & Performance Optimizations
 
-**IterateIntegers Performance**
-<br>
-<img src="plots/IterateIntegers_performance.png" width="80%">
+This section details the specific techniques that give `optimap` its performance edge.
 
-**RandomDistinct2 Performance**
-<br>
-<img src="plots/RandomDistinct2_performance.png" width="80%">
+### SIMD-Accelerated Probing
 
-**RandomFind 200 Performance**
-<br>
-<img src="plots/RandomFind_200_performance.png" width="80%">
+The most significant optimization is the use of SIMD (Single Instruction, Multiple Data) instructions to accelerate the search for a key.
 
-**RandomFind 2000 Performance**
-<br>
-<img src="plots/RandomFind_2000_performance.png" width="80%">
+-   **16-Slot Groups**: The map processes slots in groups of 16. This number is chosen because it matches the width of a 128-bit SSE register, allowing the CPU to operate on 16-slot metadata chunks in parallel.
 
-**RandomFind 500000 Performance**
-<br>
-<img src="plots/RandomFind_500000_performance.png" width="80%">
+-   **Control Byte Metadata**: A separate `int8_t` control byte array stores metadata for each slot. Instead of storing full hashes or pointers, each byte holds either a special value (for `empty` and `deleted` states) or a 7-bit fragment of the key's full hash (`h2`).
 
-**RandomFindString 1000000 Performance**
-<br>
-<img src="plots/RandomFindString_1000000_performance.png" width="80%">
+-   **Parallel Probing with SSE2**: During a lookup, the map loads 16 control bytes into an SSE register. It then uses a single `_mm_cmpeq_epi8` instruction to compare these 16 bytes against the target hash fragment. The result is converted into a bitmask using `_mm_movemask_epi8`. This allows us to find all potential key matches within a 16-slot group in just a few CPU cycles, dramatically speeding up the probe sequence. A non-SIMD fallback implementation is provided for broader compatibility.
 
-**RandomFindString Performance**
-<br>
-<img src="plots/RandomFindString_performance.png" width="80%">
+### Cache-Friendly Memory Layout
 
-</div>
-</details>
-</td>
-<td valign="top">
-<details>
-<summary><strong>Memory Usage</strong></summary>
-<br>
-<em>Memory consumption for various operations. Lower is better.</em>
-<div align="center">
+`optimap`'s memory layout is meticulously designed to maximize data locality and minimize CPU cache misses.
 
-**Copy Memory**
-<br>
-<img src="plots/Copy_memory.png" width="80%">
+-   **Single Contiguous Allocation**: The control bytes, key-value buckets, and an iteration acceleration mask are all allocated in **one contiguous block of memory**. This ensures that related data is physically close, improving the chances it will be loaded into the cache together.
 
-**CtorDtorEmptyMap Memory**
-<br>
-<img src="plots/CtorDtorEmptyMap_memory.png" width="80%">
+-   **Cache-Line Alignment**: The entire memory block is aligned to a **64-byte cache line boundary**. This is critical because it prevents a 16-byte group of control bytes from being split across two cache lines, which would stall the CPU and degrade SIMD performance.
 
-**CtorDtorSingleEntryMap Memory**
-<br>
-<img src="plots/CtorDtorSingleEntryMap_memory.png" width="80%">
+### Optimized Iteration for Sparse Maps
 
-**InsertHugeInt Memory**
-<br>
-<img src="plots/InsertHugeInt_memory.png" width="80%">
+Iterating over a hash map can be slow if it's sparsely populated. `optimap` includes a mechanism to make this fast.
 
-**IterateIntegers Memory**
-<br>
-<img src="plots/IterateIntegers_memory.png" width="80%">
+-   **`group_mask` Bitmask**: A `uint64_t` bitmask is maintained where each bit corresponds to a 16-slot group. A bit is set if its corresponding group contains at least one element.
 
-**RandomDistinct2 Memory**
-<br>
-<img src="plots/RandomDistinct2_memory.png" width="80%">
+-   **Skipping Empty Groups**: The iterator uses this mask to skip entire empty groups in a single check. It finds the next non-empty group by using efficient intrinsics like `__builtin_ctzll` (count trailing zeros) to find the next set bit in the mask. This makes iteration over sparse maps significantly faster than a simple linear scan.
 
-**RandomFind 200 Memory**
-<br>
-<img src="plots/RandomFind_200_memory.png" width="80%">
+### gxhash: A Hardware-Accelerated Hashing Algorithm
 
-**RandomFind 2000 Memory**
-<br>
-<img src="plots/RandomFind_2000_memory.png" width="80%">
+The performance of a hash map is fundamentally limited by its hash function. [Oliver Giniaux](https://ogxd.github.io/) wrote [the original implementation](https://github.com/ogxd/gxhash) in Rust. I wrote it in C++.
 
-**RandomFind 500000 Memory**
-<br>
-<img src="plots/RandomFind_500000_memory.png" width="80%">
+-   **AES-NI Accelerated Path**: `gxhash` features a fast path that leverages AES-NI CPU instructions for hashing. This instruction set is designed for cryptography but can be repurposed to create an extremely fast and high-quality hash function, significantly outperforming traditional multiplication-and-rotation-based algorithms.
 
-**RandomFindString 1000000 Memory**
-<br>
-<img src="plots/RandomFindString_1000000_memory.png" width="80%">
+-   **Runtime CPU Feature Detection**: To ensure portability, `gxhash` performs runtime CPU feature detection. It checks if the user's hardware supports AES-NI and chooses the optimal code path at runtime, ensuring maximum performance when available and falling back to a portable implementation otherwise.
 
-**RandomFindString Memory**
-<br>
-<img src="plots/RandomFindString_memory.png" width="80%">
+## 3. What I Learned from This Project
 
-</div>
-</details>
-</td>
-</tr>
-</table>
+This project was a deep dive into performance engineering and low-level optimization. The key takeaways are framed by the technical features implemented.
 
-### Build
+-   **The Power of Data-Oriented Design**: I learned that how you structure data is often more important for performance than elegant class hierarchies. Separating the "hot" control bytes from the "cold" key-value pairs was the key insight that enabled massive SIMD speedups.
 
-```bash
-# Build the project
-mkdir build && cd build
-cmake ..
-make
+-   **Practical SIMD Programming**: I gained hands-on experience with x86 intrinsics to solve a real-world problem. The `_mm_cmpeq_epi8` and `_mm_movemask_epi8` pattern is a fundamental technique in high-performance computing, and implementing it provided a concrete understanding of its power.
 
-# Run benchmarks
-./OptiMapBenchmarks
-```
+-   **Low-Level Memory Management**: I came to appreciate the profound performance impact of memory alignment and data locality. Writing a custom aligned allocator and managing a single memory block for the entire data structure was a crucial learning experience that demonstrated how to minimize the overhead of memory access.
+
+-   **Advanced Bit Manipulation**: I realized the incredible efficiency of using bitmasks and bit-twiddling hacks. These techniques were used for managing group state (`group_mask`), iterating through SIMD results (`BitMask` struct), and quickly finding the next element, reinforcing that performance often comes from clever, low-level thinking.
+
+-   **CPU-Specific Optimizations**: I learned how to write modern C++ code that adapts to the user's hardware. By checking for CPU features like AES-NI at runtime, it's possible to unlock maximum performance when available while maintaining portability for systems without those features.
