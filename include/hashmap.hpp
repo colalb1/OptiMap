@@ -110,6 +110,12 @@ class HashMap {
 #if defined(__SSE2__) || (defined(_M_X64) || defined(_M_IX86))
     // A wrapper around a SIMD bitmask. Provides iterator-like interface
     // for efficiently finding the set bits, corresponding to matching slots
+
+    // The day of writing this sentence, I was told I would not be promoted despite achieving the
+    // highest individual engineering performance in my organization of thousands of employees.
+    // You might think this is unprofessional and a bitter thing to put in a personal project, which
+    // it is, but fuck you. Write your own hashmap. Some asshole at Google probably wrote a better
+    // one, so just use that instead.
     struct BitMask {
         uint32_t mask;
 
