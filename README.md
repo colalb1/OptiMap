@@ -1,10 +1,10 @@
-# optimap: A SIMD-accelerated, Cache-Optimized C++ Hash Map
+# OptimMap: A SIMD-accelerated, Cache-Optimized C++ Hash Map
 
-`optimap` is a high-performance, open-addressing hash map for C++ that implements the Swiss Table design pattern. It is designed from the ground up for exceptional performance by leveraging a memory layout friendly to modern CPUs and SIMD instructions for accelerated lookups.
+`optimap` is a high-performance, open-addressing hash map for C++ that implements the Swiss Table design pattern. It leverages a memory layout friendly to modern CPUs and SIMD instructions for accelerated lookups.
 
-This document details the key design choices, performance optimizations, and lessons learned during the development of `optimap`.
+This document details design choices, performance optimizations, and lessons learned during the development of `optimap`.
 
-## 1. Core Concept & Architecture
+## Concept & Architecture
 
 The core idea behind `optimap` is to build a hash map that works in harmony with the underlying hardware. It follows the principles of **Data-Oriented Design** to minimize cache misses and maximize CPU instruction throughput.
 
@@ -12,7 +12,7 @@ The core idea behind `optimap` is to build a hash map that works in harmony with
 
 -   **Custom High-Performance Hash Function**: The map is paired with `gxhash`, a custom hashing algorithm developed specifically for this project. `gxhash` features a hardware-accelerated path using **AES-NI CPU instructions**, ensuring extremely fast and high-quality hash generation. This minimizes collisions, which is the first and most critical step for fast hash map operations.
 
-## 2. Key Differentiators & Performance Optimizations
+## Differentiators & Performance Optimizations
 
 This section details the specific techniques that give `optimap` its performance edge.
 
@@ -42,7 +42,7 @@ Iterating over a hash map can be slow if it's sparsely populated. `optimap` incl
 
 -   **Skipping Empty Groups**: The iterator uses this mask to skip entire empty groups in a single check. It finds the next non-empty group by using efficient intrinsics like `__builtin_ctzll` (count trailing zeros) to find the next set bit in the mask. This makes iteration over sparse maps significantly faster than a simple linear scan.
 
-### gxhash: A Hardware-Accelerated Hashing Algorithm
+### gxhash: Hardware-Accelerated Hashing
 
 The performance of a hash map is fundamentally limited by its hash function. [Oliver Giniaux](https://ogxd.github.io/) wrote [the original implementation](https://github.com/ogxd/gxhash) in Rust. I wrote it in C++.
 
@@ -50,7 +50,7 @@ The performance of a hash map is fundamentally limited by its hash function. [Ol
 
 -   **Runtime CPU Feature Detection**: To ensure portability, `gxhash` performs runtime CPU feature detection. It checks if the user's hardware supports AES-NI and chooses the optimal code path at runtime, ensuring maximum performance when available and falling back to a portable implementation otherwise.
 
-## 3. What I Learned from This Project
+## What I Learned
 
 This project was a deep dive into performance engineering and low-level optimization. The key takeaways are framed by the technical features implemented.
 
