@@ -4,6 +4,10 @@
 
 This document details design choices, performance optimizations, and lessons learned during the development of `optimap`.
 
+### Prerequisites
+- CMake $\geq$ 4.0
+- A C++23-compatible compiler
+
 ## Concept & Architecture
 
 [Data-oriented design principles](https://en.wikipedia.org/wiki/Data-oriented_design) are used to minimize cache misses and minimize CPU instruction throughput.
@@ -64,3 +68,129 @@ This project was a deep dive into performance engineering and low-level optimiza
 -   **Advanced Bit Manipulation**: I realized the incredible efficiency of using bitmasks and bit-twiddling hacks. These techniques were used for managing group state (`group_mask`), iterating through SIMD results (`BitMask` struct), and quickly finding the next element, reinforcing that performance often comes from clever, low-level thinking.
 
 -   **CPU-Specific Optimizations**: I learned how to write modern C++ code that adapts to the user's hardware. By checking for CPU features like AES-NI at runtime, it's possible to unlock maximum performance when available while maintaining portability for systems without those features.
+
+
+## Benchmarks
+Here are the performance and memory usage benchmarks for OptiMap compared to `std::unordered_map` and `ankerl::unordered_dense::map`. `std::unordered_map` and `ankerl::unordered_dense::map` use various hash functions while OptiMap uses its own proprietary hash function.
+
+<table>
+<tr>
+<td valign="top">
+<details>
+<summary><strong>Performance Results</strong></summary>
+<br>
+<em>Speed of various operations. Lower is better.</em>
+<div align="center">
+
+**Copy Performance**
+<br>
+<img src="plots/Copy_performance.png" width="80%">
+
+**CtorDtorEmptyMap Performance**
+<br>
+<img src="plots/CtorDtorEmptyMap_performance.png" width="80%">
+
+**CtorDtorSingleEntryMap Performance**
+<br>
+<img src="plots/CtorDtorSingleEntryMap_performance.png" width="80%">
+
+**InsertHugeInt Performance**
+<br>
+<img src="plots/InsertHugeInt_performance.png" width="80%">
+
+**IterateIntegers Performance**
+<br>
+<img src="plots/IterateIntegers_performance.png" width="80%">
+
+**RandomDistinct2 Performance**
+<br>
+<img src="plots/RandomDistinct2_performance.png" width="80%">
+
+**RandomFind 200 Performance**
+<br>
+<img src="plots/RandomFind_200_performance.png" width="80%">
+
+**RandomFind 2000 Performance**
+<br>
+<img src="plots/RandomFind_2000_performance.png" width="80%">
+
+**RandomFind 500000 Performance**
+<br>
+<img src="plots/RandomFind_500000_performance.png" width="80%">
+
+**RandomFindString 1000000 Performance**
+<br>
+<img src="plots/RandomFindString_1000000_performance.png" width="80%">
+
+**RandomFindString Performance**
+<br>
+<img src="plots/RandomFindString_performance.png" width="80%">
+
+
+</div>
+</details>
+</td>
+<td valign="top">
+<details>
+<summary><strong>Memory Usage</strong></summary>
+<br>
+<em>Memory consumption for various operations. Lower is better.</em>
+<div align="center">
+
+**Copy Memory**
+<br>
+<img src="plots/Copy_memory.png" width="80%">
+
+**CtorDtorEmptyMap Memory**
+<br>
+<img src="plots/CtorDtorEmptyMap_memory.png" width="80%">
+
+**CtorDtorSingleEntryMap Memory**
+<br>
+<img src="plots/CtorDtorSingleEntryMap_memory.png" width="80%">
+
+**InsertHugeInt Memory**
+<br>
+<img src="plots/InsertHugeInt_memory.png" width="80%">
+
+**IterateIntegers Memory**
+<br>
+<img src="plots/IterateIntegers_memory.png" width="80%">
+
+**RandomDistinct2 Memory**
+<br>
+<img src="plots/RandomDistinct2_memory.png" width="80%">
+
+**RandomFind 200 Memory**
+<br>
+<img src="plots/RandomFind_200_memory.png" width="80%">
+
+**RandomFind 2000 Memory**
+<br>
+<img src="plots/RandomFind_2000_memory.png" width="80%">
+
+**RandomFind 500000 Memory**
+<br>
+<img src="plots/RandomFind_500000_memory.png" width="80%">
+
+**RandomFindString 1000000 Memory**
+<br>
+<img src="plots/RandomFindString_1000000_memory.png" width="80%">
+
+**RandomFindString Memory**
+<br>
+<img src="plots/RandomFindString_memory.png" width="80%">
+
+</div>
+</details>
+</td>
+</tr>
+</table>
+
+### Build
+
+```bash
+# Build the project
+mkdir build && cd build
+cmake ..
+make
