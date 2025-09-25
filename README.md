@@ -158,53 +158,55 @@ Peruse the performance plots below by clicking the dropdowns.
 </tr>
 </table>
 
+<!-- Edit below this!!!!!! -->
 
-## Concept & Architecture
+## Architecture & Design
 
-[Data-oriented design principles](https://en.wikipedia.org/wiki/Data-oriented_design) are used to minimize cache misses and minimize CPU instruction throughput.
+`optimap` is an open-addressing hash map engineered from first principles of [data-oriented design](https://en.wikipedia.org/wiki/Data-oriented_design). The architecture prioritizes CPU cache efficiency and instruction-level parallelism to achieve maximum throughput. Every design choice is intended to minimize cache misses, reduce branch mispredictions, and leverage modern CPU features like `SIMD` and `AES-NI`.
 
-<!-- go into more technical depth on the swiss table design -->
--   **Open-Addressing with Swiss Table Design**: `optimap` is an open-addressing hash map that uses linear probing. It is based on the "Swiss Table" design, which is renowned for its performance. This approach avoids the pointer chasing inherent in chaining-based maps, resulting in a more predictable and efficient memory access pattern.
+The core of `optimap` is a C++ implementation of the [Swiss Table design](https://abseil.io/about/design/swisstables), which decouples slot metadata from the key-value entries. This separation is fundamental, as it allows the algorithm to operate on a compact, cache-friendly metadata array for the majority of a probe sequence, deferring expensive access to the main bucket array until a potential match is identified.
 
--   **Custom High-Performance Hash Function**: [Oliver Giniaux](https://ogxd.github.io/) wrote [the original implementation](https://github.com/ogxd/gxhash) in Rust. I wrote it in C++.`gxhash` features a hardware-accelerated path using [AES-NI CPU instructions](https://en.wikipedia.org/wiki/AES_instruction_set), ensuring fast hash generation that minimizes collisions.
+## Core Mechanics & Performance Optimizations
 
-## Differentiators & Performance Optimizations
+### SIMD-Accelerated Swiss Table Probing
 
-This section details the specific techniques that give `optimap` its performance edge.
+The lookup process is the most critical operation and has been heavily optimized using SIMD instructions. Instead of a naive linear probe checking one slot at a time, optimap processes groups of 16 slots in parallel.
 
-### SIMD-Accelerated Probing
+* Decoupled Metadata Array (`m_ctrl`): The map maintains a contiguous `int8_t` array where each byte corresponds to a slot in the main bucket array. This array is exceptionally cache-friendly; a single 64-byte cache line holds the metadata for 64 slots.
 
-The most significant optimization is the use of SIMD (Single Instruction, Multiple Data) instructions to accelerate the search for a key.
+* H1/H2 Hash Partitioning: A 64-bit hash is partitioned into two components:
+    * H1 (Lower Bits): Determines the starting group index for a probe sequence (hash & (capacity - 1))
+    * H2 (Upper 7 Bits): A "fingerprint" of the hash stored in the metadata array. The 8th bit (MSB) is reserved as a state flag, where a 1 indicates an EMPTY (0b10000000) or DELETED (0b11111110) slot, and 0 indicates a FULL slot.
 
--   **16-Slot Groups**: The map processes slots in groups of 16. This number is chosen because it matches the width of a 128-bit SSE register, allowing the CPU to operate on 16-slot metadata chunks in parallel.
+* Parallel Lookup with SSE2: The probing mechanism is executed with SSE2 intrinsics:
+    * A 16-byte chunk of the metadata array is loaded into a __m128i register.
+    * The target H2 fingerprint is broadcast across another __m128i register using _mm_set1_epi8.
+    * A single _mm_cmpeq_epi8 instruction performs a parallel byte-wise comparison, identifying all slots in the group that match the H2 fingerprint.
+    * The 128-bit result is compacted into a 16-bit bitmask via _mm_movemask_epi8.
 
--   **Control Byte Metadata**: A separate `int8_t` control byte array stores metadata for each slot. Instead of storing full hashes or pointers, each byte holds either a special value (for `empty` and `deleted` states) or a 7-bit fragment of the key's full hash (`h2`).
+If this bitmask is non-zero, it signifies one or more potential matches. The algorithm then uses a bit-scan intrinsic (__builtin_ctz or _BitScanForward) to identify the index of each potential match. Only then is the more expensive full key comparison performed by accessing the main bucket array. This strategy filters out the vast majority of non-matching slots using a few, highly efficient CPU instructions.
 
--   **Parallel Probing with SSE2**: During a lookup, the map loads 16 control bytes into an SSE register. It then uses a single `_mm_cmpeq_epi8` instruction to compare these 16 bytes against the target hash fragment. The result is converted into a bitmask using `_mm_movemask_epi8`. This allows us to find all potential key matches within a 16-slot group in just a few CPU cycles, dramatically speeding up the probe sequence. A non-SIMD fallback implementation is provided for broader compatibility.
+### Memory Layout and Data Locality
 
-### Cache-Friendly Memory Layout
+To complement the SIMD-friendly algorithm, the memory layout is optimized to prevent pipeline stalls and maximize data locality.
 
-`optimap`'s memory layout is meticulously designed to maximize data locality and minimize CPU cache misses.
+* Contiguous Allocation: The m_ctrl metadata, m_buckets key-value entries, and an iteration acceleration mask (m_group_mask) are all allocated in a single, contiguous memory block. This reduces allocation overhead and ensures that all components of the hash map are physically co-located, maximizing the utility of the CPU's prefetcher.
+* Cache-Line Alignment: The entire block is aligned to a 64-byte boundary. This guarantees that a 16-byte metadata group can never be split across two cache lines—a critical optimization that prevents alignment-related stalls during SIMD load operations.
 
--   **Single Contiguous Allocation**: The control bytes, key-value buckets, and an iteration acceleration mask are all allocated in **one contiguous block of memory**. This ensures that related data is physically close, improving the chances it will be loaded into the cache together.
-
--   **Cache-Line Alignment**: The entire memory block is aligned to a **64-byte cache line boundary**. This is critical because it prevents a 16-byte group of control bytes from being split across two cache lines, which would stall the CPU and degrade SIMD performance.
-
-### Optimized Iteration for Sparse Maps
-
-Iterating over a hash map can be slow if it's sparsely populated. `optimap` includes a mechanism to make this fast.
-
--   **`group_mask` Bitmask**: A `uint64_t` bitmask is maintained where each bit corresponds to a 16-slot group. A bit is set if its corresponding group contains at least one element.
-
--   **Skipping Empty Groups**: The iterator uses this mask to skip entire empty groups in a single check. It finds the next non-empty group by using efficient intrinsics like `__builtin_ctzll` (count trailing zeros) to find the next set bit in the mask. This makes iteration over sparse maps significantly faster than a simple linear scan.
 
 ### gxhash: Hardware-Accelerated Hashing
 
-The performance of a hash map is fundamentally limited by its hash function. [Oliver Giniaux](https://ogxd.github.io/) wrote [the original implementation](https://github.com/ogxd/gxhash) in Rust. I wrote it in C++.
+[Oliver Giniaux](https://ogxd.github.io/) wrote [the original implementation](https://github.com/ogxd/gxhash) in Rust. I wrote it in C++.`gxhash` features a hardware-accelerated path using [AES-NI CPU instructions](https://en.wikipedia.org/wiki/AES_instruction_set), ensuring fast hash generation that minimizes collisions.
 
--   **AES-NI Accelerated Path**: `gxhash` features a fast path that leverages AES-NI CPU instructions for hashing. This instruction set is designed for cryptography but can be repurposed to create an extremely fast and high-quality hash function, significantly outperforming traditional multiplication-and-rotation-based algorithms.
+* AES-NI Instruction Set: gxhash leverages the AES instruction set (AES-NI), which is hardware support for AES encryption and decryption available on most modern x86 CPUs. These instructions can be repurposed to create a powerful permutation and diffusion function for hashing. An AES round is effectively a high-quality, hardware-accelerated mixing function that is significantly faster than traditional integer multiplication and bit-rotation operations.
+* Runtime CPU Dispatching: To maintain portability, gxhash performs runtime feature detection. It queries the CPU to determine if AES-NI is supported and dispatches to the hardware-accelerated implementation if available. Otherwise, it falls back to a portable, albeit slower, hashing algorithm.
 
--   **Runtime CPU Feature Detection**: To ensure portability, `gxhash` performs runtime CPU feature detection. It checks if the user's hardware supports AES-NI and chooses the optimal code path at runtime, ensuring maximum performance when available and falling back to a portable implementation otherwise.
+### Accelerated Iteration Over Sparse Maps
+
+A common performance pitfall in hash maps is slow iteration when the map is sparsely populated. optimap mitigates this with an iteration acceleration structure.
+
+* Group Occupancy Bitmask (m_group_mask): A uint64_t bitmask is maintained where each bit corresponds to a 16-slot group. A bit is set to 1 if its group contains at least one FULL slot.
+* Efficiently Skipping Empty Space: During iteration, instead of checking every slot, the iterator first consults this bitmask. It can process 64 groups at a time by checking a single uint64_t. If a word in the mask is zero, all 64 corresponding groups (1024 slots) are skipped. If it is non-zero, a bit-scan intrinsic (__builtin_ctzll) is used to instantly find the index of the next non-empty group. This turns iteration over large, empty regions of the map into a near-constant-time operation.
 
 ## What I Learned
 
