@@ -28,13 +28,17 @@ ctest -V
 ## Benchmarks
 Here lie the performance and memory usage benchmark plots for OptiMap compared to `std::unordered_map` and `ankerl::unordered_dense::map`. `std::unordered_map` and `ankerl::unordered_dense::map` use various hash functions while OptiMap uses its own proprietary hash function.
 
+Most of the benchmarks are taken from [this repo](https://github.com/martinus/map_benchmark/tree/master/src/benchmarks), which I found from [this article](https://martin.ankerl.com/2022/08/27/hashmap-bench-01/).
+
 ### Highlights
 
-*   **Memory Efficiency:** `OptiMap` rivals top hash maps `ankerl::unordered_dense::map` and `std::unordered_map` in memory usage, especially at scale.
+*   **Memory Efficiency:** `OptiMap` rivals top hash maps in memory usage at scale.
 
 *   **Performance Gains Over `std::unordered_map`:** `OptiMap` is nearly *4 times* faster than `std::unordered_map` across a wide range of large-scale operations, including insertion, deletion, and copying.
 
-*   **Fast `clear()` Operation:** Clearing a map with 100 million elements takes just **~17 milliseconds** with `OptiMap`, which is orders of magnitude faster than `std::unordered_map`'s ~13 seconds and is competitive with `ankerl`'s ~4 milliseconds.
+    * I am aware that `std::unordered_map` is not very performant in the context of bespoke unordered maps like `ankerl`, [`google::dense_hash_map`](https://goog-sparsehash.sourceforge.net/doc/dense_hash_map.html), or [any of the others](https://martin.ankerl.com/2022/08/27/hashmap-bench-01/#benchmark-results-table), but this is a good standard for establishing a widely-understood performance baseline
+
+*   **Fast `clear()` Operation:** Clearing a map with 100 million elements takes just **~17 milliseconds** with `OptiMap`, magnitudes faster than `std::unordered_map`'s ~13 seconds and competitive with `ankerl`'s ~4 milliseconds.
 
 *   **Instantaneous Construction & Destruction:** Creating and destroying empty maps is a zero-cost abstraction in `OptiMap`, registering 0 time and 0 memory overhead, matching the behavior of `std::unordered_map`.
 
