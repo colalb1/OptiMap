@@ -1,21 +1,33 @@
 # OptimMap: A SIMD-accelerated, Cache-Optimized C++ Hash Map
 
-`optimap` is a high-performance, open-addressing hash map for C++ that implements the [Swiss Table design pattern](https://abseil.io/about/design/swisstables). It leverages a memory layout friendly to modern CPUs and SIMD instructions for accelerated lookups.
+`optimap` is a high-performance, open-addressing, general-purpose hash map for C++ that implements the [Swiss Table design pattern](https://abseil.io/about/design/swisstables). It leverages a memory layout friendly to modern CPUs and SIMD instructions for accelerated lookups.
 
 This document details design choices, performance optimizations, and lessons learned during the development of `optimap`.
 
 ### Prerequisites
 - CMake $\geq$ 4.0
-- A C++23-compatible compiler
+- A C++23-compatible compiler (I used `clang`)
 
 ## Benchmarks
-Here are the performance and memory usage benchmarks for OptiMap compared to `std::unordered_map` and `ankerl::unordered_dense::map`. `std::unordered_map` and `ankerl::unordered_dense::map` use various hash functions while OptiMap uses its own proprietary hash function.
+Here lie the performance and memory usage benchmark plots for OptiMap compared to `std::unordered_map` and `ankerl::unordered_dense::map`. `std::unordered_map` and `ankerl::unordered_dense::map` use various hash functions while OptiMap uses its own proprietary hash function.
+
+### Highlights
+
+*   **Memory Efficiency:** `OptiMap` rivals top hash maps `ankerl::unordered_dense::map` and `std::unordered_map` in memory usage, especially at scale.
+
+*   **Performance Gains Over `std::unordered_map`:** `OptiMap` is nearly *4 times* faster than `std::unordered_map` across a wide range of large-scale operations, including insertion, deletion, and copying.
+
+*   **Fast `clear()` Operation:** Clearing a map with 100 million elements takes just **~17 milliseconds** with `OptiMap`, which is orders of magnitude faster than `std::unordered_map`'s ~13 seconds and is competitive with `ankerl`'s ~4 milliseconds.
+
+*   **Instantaneous Construction & Destruction:** Creating and destroying empty maps is a zero-cost abstraction in `OptiMap`, registering 0 time and 0 memory overhead, matching the behavior of `std::unordered_map`.
+
+Peruse the performance plots below by clicking the dropdowns.
 
 <table>
 <tr>
 <td valign="top">
 <details>
-<summary><strong>Performance Results</strong></summary>
+<summary><strong>Performance Plots</strong></summary>
 <br>
 <em>Speed of various operations. Lower is better.</em>
 <div align="center">
@@ -70,7 +82,7 @@ Here are the performance and memory usage benchmarks for OptiMap compared to `st
 </td>
 <td valign="top">
 <details>
-<summary><strong>Memory Usage</strong></summary>
+<summary><strong>Memory Usage Plots</strong></summary>
 <br>
 <em>Memory consumption for various operations. Lower is better.</em>
 <div align="center">
@@ -127,11 +139,19 @@ Here are the performance and memory usage benchmarks for OptiMap compared to `st
 
 ## Build
 
+### Main Build
+
 ```bash
-# Build the project
 mkdir build && cd build
 cmake ..
 make
+```
+
+### Run Tests
+
+`Main Build` then...
+```bash
+ctest -V
 ```
 
 ## Concept & Architecture
