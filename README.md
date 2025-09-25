@@ -8,6 +8,23 @@ This document details design choices, performance optimizations, and lessons lea
 - CMake $\geq$ 4.0
 - A C++23-compatible compiler (I used `clang`)
 
+## Build
+
+### Main Build
+
+```bash
+mkdir build && cd build
+cmake ..
+make
+```
+
+### Run Tests
+
+`Main Build` then...
+```bash
+ctest -V
+```
+
 ## Benchmarks
 Here lie the performance and memory usage benchmark plots for OptiMap compared to `std::unordered_map` and `ankerl::unordered_dense::map`. `std::unordered_map` and `ankerl::unordered_dense::map` use various hash functions while OptiMap uses its own proprietary hash function.
 
@@ -137,22 +154,6 @@ Peruse the performance plots below by clicking the dropdowns.
 </tr>
 </table>
 
-## Build
-
-### Main Build
-
-```bash
-mkdir build && cd build
-cmake ..
-make
-```
-
-### Run Tests
-
-`Main Build` then...
-```bash
-ctest -V
-```
 
 ## Concept & Architecture
 
