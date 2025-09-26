@@ -169,21 +169,21 @@ The core of `optimap` is a C++ implementation of the [Swiss Table design](https:
 
 ### SIMD-Accelerated Swiss Table Probing
 
-The lookup process is the most critical operation and has been heavily optimized using SIMD instructions. Instead of a naive linear probe checking one slot at a time, optimap processes groups of 16 slots in parallel.
+The lookup process is heavily optimized via SIMD instructions; it processes 16 slots in parallel instead linear probing naively.
 
-* Decoupled Metadata Array (`m_ctrl`): The map maintains a contiguous `int8_t` array where each byte corresponds to a slot in the main bucket array. This array is exceptionally cache-friendly; a single 64-byte cache line holds the metadata for 64 slots.
+* Decoupled Metadata Array (`m_ctrl`): The map maintains a contiguous `int8_t` array where each byte corresponds to a slot in the main bucket array. This array is cache-friendly; a single 64-byte cache line holds the metadata for 64 slots.
 
-* H1/H2 Hash Partitioning: A 64-bit hash is partitioned into two components:
-    * H1 (Lower Bits): Determines the starting group index for a probe sequence (hash & (capacity - 1))
-    * H2 (Upper 7 Bits): A "fingerprint" of the hash stored in the metadata array. The 8th bit (MSB) is reserved as a state flag, where a 1 indicates an EMPTY (0b10000000) or DELETED (0b11111110) slot, and 0 indicates a FULL slot.
+* `H1`/`H2` Hash Partitioning: A 64-bit hash is partitioned into two components:
+    * `H1` (Lower): Determines the starting group index for a probe sequence (hash & (capacity - 1))
+    * `H2` (Upper): A "fingerprint" of the hash stored in the metadata array. The $8^{th}$ bit (MSb) is reserved as a state flag, where a `1` indicates an EMPTY (`0b10000000`) or DELETED (`0b11111110`) slot. `0` indicates a FULL slot.
 
-* Parallel Lookup with SSE2: The probing mechanism is executed with SSE2 intrinsics:
-    * A 16-byte chunk of the metadata array is loaded into a __m128i register.
-    * The target H2 fingerprint is broadcast across another __m128i register using _mm_set1_epi8.
-    * A single _mm_cmpeq_epi8 instruction performs a parallel byte-wise comparison, identifying all slots in the group that match the H2 fingerprint.
-    * The 128-bit result is compacted into a 16-bit bitmask via _mm_movemask_epi8.
+* Parallel Lookup with `SSE2`: The probing mechanism is executed with `SSE2` intrinsics:
+    * A 16-byte chunk of the metadata array is loaded into a [`__m128i`](https://learn.microsoft.com/en-us/cpp/cpp/m128i?view=msvc-170) register.
+    * The target `H2` fingerprint is broadcast across another `__m128i` register using [`_mm_set1_epi8`](https://www.cs.virginia.edu/~cr4bd/3330/S2018/simdref.html).
+    * A single `_mm_cmpeq_epi8` instruction performs a parallel byte-wise comparison, identifying all slots in the group that match the `H2` fingerprint.
+    * The 128-bit result is compacted into a 16-bit bitmask via `_mm_movemask_epi8`.
 
-If this bitmask is non-zero, it signifies one or more potential matches. The algorithm then uses a bit-scan intrinsic (__builtin_ctz or _BitScanForward) to identify the index of each potential match. Only then is the more expensive full key comparison performed by accessing the main bucket array. This strategy filters out the vast majority of non-matching slots using a few, highly efficient CPU instructions.
+If this bitmask is non-zero, it signifies one or more potential matches. The algorithm then uses a bit-scan intrinsic ([`__builtin_ctz`](https://gcc.gnu.org/onlinedocs/gcc/Bit-Operation-Builtins.html) or [`_BitScanForward`](https://learn.microsoft.com/en-us/cpp/intrinsics/bitscanforward-bitscanforward64?view=msvc-170)) to identify the index of each potential match. Then the more expensive full-key comparison is performed by accessing the main bucket array. This strategy filters out the majority of non-matching slots using a few, efficient CPU instructions.
 
 ### Memory Layout and Data Locality
 
