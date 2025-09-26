@@ -1,4 +1,4 @@
-# OptiMap: A SIMD-accelerated, Cache-Optimized C++ Hash Map
+# OptiMap: A Fast C++ Hash Map
 
 `optimap` is a high-performance, open-addressing, general-purpose hash map for C++ that implements the [Swiss Table design pattern](https://abseil.io/about/design/swisstables). It leverages a memory layout friendly to modern CPUs and SIMD instructions for accelerated lookups.
 
