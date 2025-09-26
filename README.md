@@ -213,7 +213,7 @@ $$\\{\\text{this whole project}\\}\setminus\\{\\text{C++ syntax, template progra
 
 Whenever I'm in public working on these projects, I get worried that if I go to the bathroom, then someone will take my laptop even though other people leave their computers out. It's probably fine since everyone else is doing it, but I'm worried that I'd be the ONE GUY who it happens to, then the place of work will make some policy to not leave valuables unattended, then someone will think, "boy, whoever had their \<insert valuable item\> stolen is an idiot." That would be me. My legacy would be signage at a coffee shop.
 
-This probably says something about my relative faith in humanity; I don't care to disect that. Emotion complex. Typing on computer simple.
+This probably says something about my relative faith in humanity; I don't care to dissect that. Emotion complex. Typing on computer simple.
 
 Anyway, I hope you enjoyed reading about this project and learned something along the way. I made this to learn more about memory allocation and performance manipulations in C++. I've destroyed my thoracic spine working on this project after work; I plan on doing [band pull aparts](https://www.youtube.com/watch?v=3OYSIWaJJk4) and going to bed earlier to re-gain the zest for personal projects that made working on this project possible.
 
