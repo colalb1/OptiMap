@@ -8,6 +8,11 @@ This document details design choices, performance optimizations, and lessons lea
 - CMake $\geq$ 4.0
 - A C++23-compatible compiler (I used `clang`)
 
+## Relevant Files
+
+* `include/hashmap.hpp` is the main hash map implementation
+* `include/gxhash.hpp` contains the hash function
+
 ## Build
 
 ### Main Build
