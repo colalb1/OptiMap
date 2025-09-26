@@ -197,26 +197,9 @@ The memory layout is optimized to prevent [pipeline stalls](https://en.wikipedia
 
 [Oliver Giniaux](https://ogxd.github.io/) wrote [the original implementation](https://github.com/ogxd/gxhash) in Rust. I wrote it in C++.`gxhash` features a hardware-accelerated path using [AES-NI CPU instructions](https://en.wikipedia.org/wiki/AES_instruction_set), ensuring fast hash generation that minimizes collisions.
 
-* AES-NI Instruction Set: gxhash leverages the AES instruction set (AES-NI), which is hardware support for AES encryption and decryption available on most modern x86 CPUs. These instructions can be repurposed to create a powerful permutation and diffusion function for hashing. An AES round is effectively a high-quality, hardware-accelerated mixing function that is significantly faster than traditional integer multiplication and bit-rotation operations.
-* Runtime CPU Dispatching: To maintain portability, gxhash performs runtime feature detection. It queries the CPU to determine if AES-NI is supported and dispatches to the hardware-accelerated implementation if available. Otherwise, it falls back to a portable, albeit slower, hashing algorithm.
-
-### Accelerated Iteration Over Sparse Maps
-
-A common performance pitfall in hash maps is slow iteration when the map is sparsely populated. optimap mitigates this with an iteration acceleration structure.
-
-* Group Occupancy Bitmask (m_group_mask): A uint64_t bitmask is maintained where each bit corresponds to a 16-slot group. A bit is set to 1 if its group contains at least one FULL slot.
-* Efficiently Skipping Empty Space: During iteration, instead of checking every slot, the iterator first consults this bitmask. It can process 64 groups at a time by checking a single uint64_t. If a word in the mask is zero, all 64 corresponding groups (1024 slots) are skipped. If it is non-zero, a bit-scan intrinsic (__builtin_ctzll) is used to instantly find the index of the next non-empty group. This turns iteration over large, empty regions of the map into a near-constant-time operation.
+* **AES-NI Instruction Set:** `gxhash` leverages the AES instruction set (AES-NI), a hardware support for [AES encryption and decryption](https://en.wikipedia.org/wiki/Advanced_Encryption_Standard) available on most modern x86 CPUs. These instructions can be repurposed to create a powerful permutation and diffusion function for hashing. An AES round is effectively a high-quality, hardware-accelerated mixing function that is significantly faster than traditional integer multiplication and bit-rotation operations.
+* Runtime CPU Dispatching: To maintain portability, `gxhash` performs runtime feature detection. It queries the CPU to determine if AES-NI is supported and dispatches to the hardware-accelerated implementation if available. Otherwise, it falls back to a portable (but slower) hashing algorithm.
 
 ## What I Learned
 
-This project was a deep dive into performance engineering and low-level optimization. The key takeaways are framed by the technical features implemented.
-
--   **The Power of Data-Oriented Design**: I learned that how you structure data is often more important for performance than elegant class hierarchies. Separating the "hot" control bytes from the "cold" key-value pairs was the key insight that enabled massive SIMD speedups.
-
--   **Practical SIMD Programming**: I gained hands-on experience with x86 intrinsics to solve a real-world problem. The `_mm_cmpeq_epi8` and `_mm_movemask_epi8` pattern is a fundamental technique in high-performance computing, and implementing it provided a concrete understanding of its power.
-
--   **Low-Level Memory Management**: I came to appreciate the profound performance impact of memory alignment and data locality. Writing a custom aligned allocator and managing a single memory block for the entire data structure was a crucial learning experience that demonstrated how to minimize the overhead of memory access.
-
--   **Advanced Bit Manipulation**: I realized the incredible efficiency of using bitmasks and bit-twiddling hacks. These techniques were used for managing group state (`group_mask`), iterating through SIMD results (`BitMask` struct), and quickly finding the next element, reinforcing that performance often comes from clever, low-level thinking.
-
--   **CPU-Specific Optimizations**: I learned how to write modern C++ code that adapts to the user's hardware. By checking for CPU features like AES-NI at runtime, it's possible to unlock maximum performance when available while maintaining portability for systems without those features.
+$$\{\text{this whole project}\}\setminus\{\text{C++}\}$$
