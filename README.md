@@ -158,13 +158,12 @@ Peruse the performance plots below by clicking the dropdowns.
 </tr>
 </table>
 
-<!-- Edit below this!!!!!! -->
-
 ## Architecture & Design
 
-`optimap` is an open-addressing hash map engineered from first principles of [data-oriented design](https://en.wikipedia.org/wiki/Data-oriented_design). The architecture prioritizes CPU cache efficiency and instruction-level parallelism to achieve maximum throughput. Every design choice is intended to minimize cache misses, reduce branch mispredictions, and leverage modern CPU features like `SIMD` and `AES-NI`.
+`optimap` is an open-addressing hash map engineered from first principles of [data-oriented design](https://en.wikipedia.org/wiki/Data-oriented_design). The architecture prioritizes CPU cache efficiency and instruction-level parallelism to achieve maximum throughput. Every design choice is intended to minimize cache misses, reduce branch mispredictions, and leverage modern CPU features like [`SIMD`](https://en.wikipedia.org/wiki/Single_instruction,_multiple_data) and [`AES-NI`](https://en.wikipedia.org/wiki/AES_instruction_set).
 
-The core of `optimap` is a C++ implementation of the [Swiss Table design](https://abseil.io/about/design/swisstables), which decouples slot metadata from the key-value entries. This separation is fundamental, as it allows the algorithm to operate on a compact, cache-friendly metadata array for the majority of a probe sequence, deferring expensive access to the main bucket array until a potential match is identified.
+The core of `optimap` is a C++ implementation of the [Swiss Table design](https://abseil.io/about/design/swisstables), which decouples slot metadata from the key-value entries. This separation allows the algorithm to operate on a compact, cache-friendly metadata array for most of a probe sequence, deferring expensive access to the main bucket array until a potential match is identified. I defer further technical detail about the Swiss Table structure to [this link](https://abseil.io/about/design/swisstables). [This](https://github.com/google/cwisstable) is the repo of the original implementation. It is interesting. You should read it.
+
 
 ## Core Mechanics & Performance Optimizations
 
