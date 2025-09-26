@@ -171,13 +171,13 @@ The core of `optimap` is a C++ implementation of the [Swiss Table design](https:
 
 The lookup process is heavily optimized via SIMD instructions; it processes 16 slots in parallel instead linear probing naively.
 
-* Decoupled Metadata Array (`m_ctrl`): The map maintains a contiguous `int8_t` array where each byte corresponds to a slot in the main bucket array. This array is cache-friendly; a single 64-byte cache line holds the metadata for 64 slots.
+* **Decoupled Metadata Array (`m_ctrl`):** The map maintains a contiguous `int8_t` array where each byte corresponds to a slot in the main bucket array. This array is cache-friendly; a single 64-byte cache line holds the metadata for 64 slots.
 
-* `H1`/`H2` Hash Partitioning: A 64-bit hash is partitioned into two components:
+* **`H1`/`H2` Hash Partitioning:** A 64-bit hash is partitioned into two components:
     * `H1` (Lower): Determines the starting group index for a probe sequence (hash & (capacity - 1))
     * `H2` (Upper): A "fingerprint" of the hash stored in the metadata array. The $8^{th}$ bit (MSb) is reserved as a state flag, where a `1` indicates an EMPTY (`0b10000000`) or DELETED (`0b11111110`) slot. `0` indicates a FULL slot.
 
-* Parallel Lookup with `SSE2`: The probing mechanism is executed with `SSE2` intrinsics:
+* **Parallel Lookup with `SSE2`:** The probing mechanism is executed with `SSE2` intrinsics:
     * A 16-byte chunk of the metadata array is loaded into a [`__m128i`](https://learn.microsoft.com/en-us/cpp/cpp/m128i?view=msvc-170) register.
     * The target `H2` fingerprint is broadcast across another `__m128i` register using [`_mm_set1_epi8`](https://www.cs.virginia.edu/~cr4bd/3330/S2018/simdref.html).
     * A single `_mm_cmpeq_epi8` instruction performs a parallel byte-wise comparison, identifying all slots in the group that match the `H2` fingerprint.
@@ -187,10 +187,10 @@ If this bitmask is non-zero, it signifies one or more potential matches. The alg
 
 ### Memory Layout and Data Locality
 
-To complement the SIMD-friendly algorithm, the memory layout is optimized to prevent pipeline stalls and maximize data locality.
+The memory layout is optimized to prevent [pipeline stalls](https://en.wikipedia.org/wiki/Pipeline_stall) and maximize data locality.
 
-* Contiguous Allocation: The m_ctrl metadata, m_buckets key-value entries, and an iteration acceleration mask (m_group_mask) are all allocated in a single, contiguous memory block. This reduces allocation overhead and ensures that all components of the hash map are physically co-located, maximizing the utility of the CPU's prefetcher.
-* Cache-Line Alignment: The entire block is aligned to a 64-byte boundary. This guarantees that a 16-byte metadata group can never be split across two cache lines—a critical optimization that prevents alignment-related stalls during SIMD load operations.
+* **Contiguous Allocation:** The `m_ctrl` metadata, `m_buckets` key-value entries, and `m_group_mask` iteration acceleration mask are allocated in a single, contiguous memory block. This reduces allocation overhead and ensures that all components of the hash map are physically co-located, maximizing the utility of the CPU's prefetcher.
+* **Cache-Line Alignment:** The block is aligned to a 64-byte boundary. This guarantees that a 16-byte metadata group can never be split across two cache lines. This prevents alignment-related stalls during SIMD load operations.
 
 
 ### gxhash: Hardware-Accelerated Hashing
