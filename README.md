@@ -207,4 +207,7 @@ The memory layout is optimized to prevent [pipeline stalls](https://en.wikipedia
 
 ## What I Learned
 
-$$\{\text{this whole project}\}\setminus\{\text{C++}\}$$
+$$\{\text{this whole project}\}\setminus\{\text{C++ syntax, template programming, other minor C++ details}\}$$
+
+## Afterword
+
