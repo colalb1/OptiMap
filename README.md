@@ -200,7 +200,7 @@ The memory layout is optimized to prevent [pipeline stalls](https://en.wikipedia
 
 ### gxhash: Hardware-Accelerated Hashing
 
-[Oliver Giniaux](https://ogxd.github.io/) wrote [the original implementation](https://github.com/ogxd/gxhash) in Rust. I wrote it in C++.`gxhash` features a hardware-accelerated path using [AES-NI CPU instructions](https://en.wikipedia.org/wiki/AES_instruction_set), ensuring fast hash generation that minimizes collisions.
+[Oliver Giniaux](https://ogxd.github.io/) wrote [the original implementation](https://github.com/ogxd/gxhash) in Rust. I wrote it in C++. `gxhash` features a hardware-accelerated path using [AES-NI CPU instructions](https://en.wikipedia.org/wiki/AES_instruction_set), ensuring fast hash generation that minimizes collisions.
 
 * **AES-NI Instruction Set:** `gxhash` leverages the AES instruction set (AES-NI), a hardware support for [AES encryption and decryption](https://en.wikipedia.org/wiki/Advanced_Encryption_Standard) available on most modern x86 CPUs. These instructions can be repurposed to create a powerful permutation and diffusion function for hashing. An AES round is effectively a high-quality, hardware-accelerated mixing function that is significantly faster than traditional integer multiplication and bit-rotation operations.
 * **Runtime CPU Dispatching:** To maintain portability, `gxhash` performs runtime feature detection. It queries the CPU to determine if AES-NI is supported and dispatches to the hardware-accelerated implementation if available. Otherwise, it falls back to a portable (but slower) hashing algorithm.
