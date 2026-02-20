@@ -1182,9 +1182,8 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_EraseNonExisting)(benchmark::
     }
 }
 
-BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_EraseNonExisting)(
-        benchmark::State& state
-)
+BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_EraseNonExisting)
+(benchmark::State& state)
 {
     std::unordered_map<std::string, uint64_t, Fnv1a> map;
     map.max_load_factor(0.875);
@@ -1201,9 +1200,8 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_EraseNonExisting)(
     }
 }
 
-BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_EraseNonExisting)(
-        benchmark::State& state
-)
+BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_EraseNonExisting)
+(benchmark::State& state)
 {
     absl::flat_hash_map<std::string, uint64_t, Fnv1a> map;
     map.max_load_factor(0.875);
@@ -1302,9 +1300,8 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, OptiMap_LookupNonExisting)(benchmark:
     }
 }
 
-BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_LookupNonExisting)(
-        benchmark::State& state
-)
+BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_LookupNonExisting)
+(benchmark::State& state)
 {
     std::unordered_map<std::string, uint64_t, Fnv1a> map;
     map.max_load_factor(0.875);
@@ -1321,9 +1318,8 @@ BENCHMARK_DEFINE_F(String16Value64Fixture, StdUnorderedMap_LookupNonExisting)(
     }
 }
 
-BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_LookupNonExisting)(
-        benchmark::State& state
-)
+BENCHMARK_DEFINE_F(String16Value64Fixture, AbslFlatHashMap_LookupNonExisting)
+(benchmark::State& state)
 {
     absl::flat_hash_map<std::string, uint64_t, Fnv1a> map;
     map.max_load_factor(0.875);
