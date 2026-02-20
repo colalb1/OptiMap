@@ -1,12 +1,12 @@
-#include <benchmark/benchmark.h>
+#include "hashmap.hpp"
 
+#include <benchmark/benchmark.h>
 #include <cstdint>
 #include <random>
 #include <vector>
 
-#include "hashmap.hpp"
-
-BENCHMARK(InsertHugeInt) {
+BENCHMARK(InsertHugeInt)
+{
     sfc64 rng(213);
 
     {
@@ -18,7 +18,8 @@ BENCHMARK(InsertHugeInt) {
 #else
         M map;
 #endif
-        for (size_t n = 0; n < 100'000'000; ++n) {
+        for (size_t n = 0; n < 100'000'000; ++n)
+        {
             map[static_cast<int>(rng())];
         }
         bench.endMeasure(98841586, map.size());
@@ -30,14 +31,16 @@ BENCHMARK(InsertHugeInt) {
         // remember the rng's state so we can remove like we've added
         auto const state = rng.state();
         bench.beginMeasure("reinsert 100M int");
-        for (size_t n = 0; n < 100'000'000; ++n) {
+        for (size_t n = 0; n < 100'000'000; ++n)
+        {
             map[static_cast<int>(rng())];
         }
         bench.endMeasure(98843646, map.size());
 
         rng.state(state);
         bench.beginMeasure("remove 100M int");
-        for (size_t n = 0; n < 100'000'000; ++n) {
+        for (size_t n = 0; n < 100'000'000; ++n)
+        {
             map.erase(static_cast<int>(rng()));
         }
         bench.endMeasure(0, map.size());

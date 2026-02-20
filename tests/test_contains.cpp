@@ -1,8 +1,9 @@
-#include <gtest/gtest.h>
-
 #include "hashmap.hpp"
 
-TEST(ContainsTest, Contains) {
+#include <gtest/gtest.h>
+
+TEST(ContainsTest, Contains)
+{
     optimap::HashMap<uint64_t, uint64_t> map;
 
     EXPECT_FALSE(map.contains(0));

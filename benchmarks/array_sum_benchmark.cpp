@@ -1,16 +1,17 @@
 #include <benchmark/benchmark.h>
-
 #include <numeric>
 #include <vector>
 
 // Benchmark for array sum using std::accumulate
-static void BM_ArraySum(benchmark::State& state) {
+static void BM_ArraySum(benchmark::State& state)
+{
     // Benchmark setup: big vector
     const int array_size = 10000;
     std::vector<int> vec(array_size, 1);
 
     // Summation benchmark
-    for (auto _ : state) {
+    for (auto _ : state)
+    {
         int sum = std::accumulate(vec.begin(), vec.end(), 0);
         benchmark::DoNotOptimize(sum);
     }
@@ -18,13 +19,15 @@ static void BM_ArraySum(benchmark::State& state) {
 BENCHMARK(BM_ArraySum);
 
 // Benchmark for array sum w/different sizes
-static void BM_ArraySumVariableSize(benchmark::State& state) {
+static void BM_ArraySumVariableSize(benchmark::State& state)
+{
     // Get state size
     const int array_size = state.range(0);
     std::vector<int> vec(array_size, 1);
 
     // Summation bench
-    for (auto _ : state) {
+    for (auto _ : state)
+    {
         int sum = std::accumulate(vec.begin(), vec.end(), 0);
         benchmark::DoNotOptimize(sum);
     }

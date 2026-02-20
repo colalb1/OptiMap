@@ -1,8 +1,9 @@
-#include <iostream>
-
 #include "hashmap.hpp"
 
-int main() {
+#include <iostream>
+
+int main()
+{
     // Create a HashMap with string keys and int values
     optimap::HashMap<std::string, int> map;
 
@@ -19,18 +20,21 @@ int main() {
     // Find and print elements
     std::cout << "\nFinding elements..." << std::endl;
     auto val1 = map.find("two");
-    if (val1 != map.end()) {
+    if (val1 != map.end())
+    {
         std::cout << "Found key 'two' with value: " << val1->second << std::endl;
     }
 
     auto val2 = map.find("four");
-    if (val2 == map.end()) {
+    if (val2 == map.end())
+    {
         std::cout << "Key 'four' not found, as expected." << std::endl;
     }
 
     // Use iterators to print all elements
     std::cout << "\nIterating over all elements:" << std::endl;
-    for (const auto& pair : map) {
+    for (const auto& pair : map)
+    {
         std::cout << "- {" << pair.first << ": " << pair.second << "}" << std::endl;
     }
 
@@ -40,7 +44,8 @@ int main() {
     std::cout << "Map size after erase: " << map.size() << std::endl;
 
     std::cout << "\nFinal map contents:" << std::endl;
-    for (const auto& pair : map) {
+    for (const auto& pair : map)
+    {
         std::cout << "- {" << pair.first << ": " << pair.second << "}" << std::endl;
     }
 

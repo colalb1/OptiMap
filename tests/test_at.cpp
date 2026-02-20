@@ -1,8 +1,9 @@
-#include <gtest/gtest.h>
-
 #include "hashmap.hpp"
 
-TEST(AtTest, At) {
+#include <gtest/gtest.h>
+
+TEST(AtTest, At)
+{
     optimap::HashMap<int, int> map;
     optimap::HashMap<int, int> const& cmap = map;
 

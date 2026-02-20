@@ -1,8 +1,8 @@
 #include <benchmark/benchmark.h>
-
 #include <cstdint>
 
-BENCHMARK(Copy) {
+BENCHMARK(Copy)
+{
     size_t result = 0;
 
     sfc64 rng(987);
@@ -15,9 +15,11 @@ BENCHMARK(Copy) {
     M mapSource;
 #endif
     uint64_t rememberKey = 0;
-    for (size_t i = 0; i < 1'000'000; ++i) {
+    for (size_t i = 0; i < 1'000'000; ++i)
+    {
         auto key = rng();
-        if (i == 500'000) {
+        if (i == 500'000)
+        {
             rememberKey = key;
         }
         mapSource[key] = i;
@@ -25,7 +27,8 @@ BENCHMARK(Copy) {
 
     M mapForCopy = mapSource;
     bench.beginMeasure("copy ctor");
-    for (size_t n = 0; n < 200; ++n) {
+    for (size_t n = 0; n < 200; ++n)
+    {
         M m = mapForCopy;
         result += m.size() + m[rememberKey];
         mapForCopy[rng()] = rng();
@@ -39,7 +42,8 @@ BENCHMARK(Copy) {
 #else
     M m;
 #endif
-    for (size_t n = 0; n < 200; ++n) {
+    for (size_t n = 0; n < 200; ++n)
+    {
         m = mapForCopy;
         result += m.size() + m[rememberKey];
         mapForCopy[rng()] = rng();
