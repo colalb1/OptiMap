@@ -15,53 +15,75 @@ jobs:
         build_type: [Debug, Release]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
-    # Install clang-format & clang-tidy
-    - name: Install clang tools
-      run: sudo apt-get update && sudo apt-get install -y clang-format clang-tidy
+    - name: Install clang tools (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang-format clang-tidy
 
-    # Run formatting check
-    - name: Run clang-format check
-      run: clang-format --dry-run --Werror optimap/*.cpp include/*.hpp
-
-    # Run clang-tidy check
-    - name: Run clang-tidy
-      run: clang-tidy optimap/*.cpp -- -std=c++23
-
-    # Configure & build
     - name: Configure CMake
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
+      run: >-
+        cmake -B ${{ github.workspace }}/build
+        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
     - name: Build
-      run: cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
+      run: cmake --build ${{ github.workspace }}/build --config ${{ matrix.build_type }}
 
-    # Build docs
-    - name: Install Doxygen
+    - name: Run clang-format check (Linux)
       if: matrix.os == 'ubuntu-latest'
-      run: sudo apt-get install -y doxygen graphviz
-  
-    - name: Build documentation
-      run: cmake --build ${{github.workspace}}/build --target doc
+      run: |
+        files=$(git ls-files '*.cpp' '*.hpp')
+        if [ -z "$files" ]; then
+          echo "No C++ source/header files found; skipping clang-format check."
+          exit 0
+        fi
+        clang-format --dry-run --Werror $files
 
-    # Test and Coverage (Ubuntu Debug only)
-    - name: Install lcov
-      if: matrix.os == 'ubuntu-latest' && matrix.build_type == 'Debug'
-      run: sudo apt-get update && sudo apt-get install -y lcov
+    - name: Run clang-tidy check (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        files=$(git ls-files '*.cpp')
+        if [ -z "$files" ]; then
+          echo "No C++ source files found; skipping clang-tidy check."
+          exit 0
+        fi
+        clang-tidy $files -p ${{ github.workspace }}/build -- -std=c++23
+
+    - name: Build documentation (Linux, if doc target exists)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        if cmake --build ${{ github.workspace }}/build --target help | grep -Eq '(^| )doc($| )'; then
+          sudo apt-get update
+          sudo apt-get install -y doxygen graphviz
+          cmake --build ${{ github.workspace }}/build --target doc
+        else
+          echo "No 'doc' target defined; skipping docs build."
+        fi
 
     - name: Test
-      working-directory: ${{github.workspace}}/build
-      run: ctest -C ${{matrix.build_type}} --output-on-failure
+      working-directory: ${{ github.workspace }}/build
+      run: ctest -C ${{ matrix.build_type }} --output-on-failure
+
+    - name: Install lcov
+      if: matrix.os == 'ubuntu-latest' && matrix.build_type == 'Debug'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y lcov
 
     - name: Generate coverage report
       if: matrix.os == 'ubuntu-latest' && matrix.build_type == 'Debug'
-      working-directory: ${{github.workspace}}/build
+      working-directory: ${{ github.workspace }}/build
       run: |
         lcov --capture --directory . --output-file coverage.info
         lcov --remove coverage.info '/usr/*' --output-file coverage.info
         lcov --list coverage.info
 
     - name: Upload coverage to Codecov
+      if: matrix.os == 'ubuntu-latest' && matrix.build_type == 'Debug'
       uses: codecov/codecov-action@v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: false
