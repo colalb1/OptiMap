@@ -1,4 +1,5 @@
 #include <benchmark/benchmark.h>
+
 #include <numeric>
 #include <vector>
 
@@ -27,10 +28,8 @@ static void BM_ArraySumVariableSize(benchmark::State& state) {
         int sum = std::accumulate(vec.begin(), vec.end(), 0);
         benchmark::DoNotOptimize(sum);
     }
-    
+
     // Report the number of processed items
     state.SetItemsProcessed(state.iterations() * array_size);
 }
-BENCHMARK(BM_ArraySumVariableSize)
-    ->RangeMultiplier(2)
-    ->Range(1024, 1024*1024);
+BENCHMARK(BM_ArraySumVariableSize)->RangeMultiplier(2)->Range(1024, 1024 * 1024);

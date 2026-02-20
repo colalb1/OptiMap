@@ -110,7 +110,7 @@ class HashMap {
 #if defined(__SSE2__) || (defined(_M_X64) || defined(_M_IX86))
     // A wrapper around a SIMD bitmask. Provides iterator-like interface
     // for efficiently finding the set bits, corresponding to matching slots
-    
+
     struct BitMask {
         uint32_t mask;
 

@@ -64,7 +64,7 @@ static inline uint64_t wyhash(const void* key, size_t len, uint64_t seed, const 
     const uint8_t* p = (const uint8_t*)key;
     seed ^= _wymix(seed ^ secret[0], secret[1]);
     uint64_t a, b;
-    
+
     if (len <= 16) {
         if (len >= 4) {
             a = (_wyr4(p) << 32) | _wyr4(p + ((len >> 3) << 2));
