@@ -4,10 +4,8 @@ repos:
     hooks:
       - id: end-of-file-fixer
       - id: trailing-whitespace
-  - repo: local
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v18.1.8
     hooks:
       - id: clang-format
-        name: clang-format (C++)
-        entry: clang-format -i
-        language: system
         files: \.(cpp|hpp)$

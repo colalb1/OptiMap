@@ -21,7 +21,7 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y clang-format clang-tidy
+        sudo apt-get install -y clang-tidy
 
     - name: Configure CMake
       run: >-
@@ -35,12 +35,8 @@ jobs:
     - name: Run clang-format check (Linux)
       if: matrix.os == 'ubuntu-latest'
       run: |
-        files=$(git ls-files '*.cpp' '*.hpp')
-        if [ -z "$files" ]; then
-          echo "No C++ source/header files found; skipping clang-format check."
-          exit 0
-        fi
-        clang-format --dry-run --Werror $files
+        python3 -m pip install --user pre-commit
+        pre-commit run clang-format --all-files --show-diff-on-failure
 
     - name: Run clang-tidy check (Linux)
       if: matrix.os == 'ubuntu-latest'
