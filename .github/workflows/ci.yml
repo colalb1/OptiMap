@@ -43,16 +43,37 @@ jobs:
       continue-on-error: ${{ github.event_name == 'pull_request' }}
       run: |
         # Keep CI lint focused on correctness/safety and avoid style-only churn.
-        files="tests/sample_test.cpp tests/test_hashmap.cpp tests/test_at.cpp tests/test_contains.cpp"
+        files="$(python3 - <<'PY'
+import json
+from pathlib import Path
+
+compile_db = Path("${{ github.workspace }}/build/compile_commands.json")
+if not compile_db.exists():
+    raise SystemExit(0)
+
+entries = json.loads(compile_db.read_text())
+seen = set()
+out = []
+for entry in entries:
+    file = entry.get("file", "")
+    if "/tests/" not in file or not file.endswith(".cpp"):
+        continue
+    if file in seen:
+        continue
+    seen.add(file)
+    out.append(file)
+
+print(" ".join(out))
+PY
+)"
         if [ -z "$files" ]; then
-          echo "No C++ source files found; skipping clang-tidy check."
+          echo "No test C++ source files found in compile_commands.json; skipping clang-tidy check."
           exit 0
         fi
         clang-tidy $files \
           -p ${{ github.workspace }}/build \
           -checks='-*,clang-analyzer-*,bugprone-*,performance-*' \
-          -warnings-as-errors='' \
-          -- -std=c++23
+          -warnings-as-errors=''
 
     - name: Build documentation (Linux, if doc target exists)
       if: matrix.os == 'ubuntu-latest'
