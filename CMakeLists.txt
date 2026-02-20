@@ -35,15 +35,14 @@ FetchContent_MakeAvailable(googletest)
 message(STATUS "GoogleTest Source Dir: ${googletest_SOURCE_DIR}")
 message(STATUS "GoogleTest Binary Dir: ${googletest_BINARY_DIR}")
 
-# Create benchmarks exe
-add_executable(OptiMapBenchmarks
-    benchmarks/hashmap_benchmark.cpp
-    benchmarks/accidentally_quadratic_benchmark.cpp
-)
-
 # Add optional abseil-cpp subdirectory when available
 set(ABSEIL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source/abseil-cpp")
 if(EXISTS "${ABSEIL_DIR}/CMakeLists.txt")
+    # Benchmarks currently depend on Abseil headers in source files.
+    add_executable(OptiMapBenchmarks
+        benchmarks/hashmap_benchmark.cpp
+        benchmarks/accidentally_quadratic_benchmark.cpp
+    )
     add_subdirectory("${ABSEIL_DIR}")
     target_link_libraries(OptiMapBenchmarks
         benchmark::benchmark
@@ -52,17 +51,11 @@ if(EXISTS "${ABSEIL_DIR}/CMakeLists.txt")
         absl::raw_hash_set
     )
     target_include_directories(OptiMapBenchmarks PRIVATE include "${ABSEIL_DIR}")
+    if(MSVC)
+        target_link_options(OptiMapBenchmarks PRIVATE /SUBSYSTEM:CONSOLE)
+    endif()
 else()
-    message(WARNING "Optional dependency not found: Source/abseil-cpp. Building benchmarks without Abseil links.")
-    target_link_libraries(OptiMapBenchmarks
-        benchmark::benchmark
-        benchmark::benchmark_main
-    )
-    target_include_directories(OptiMapBenchmarks PRIVATE include)
-endif()
-
-if(MSVC)
-    target_link_options(OptiMapBenchmarks PRIVATE /SUBSYSTEM:CONSOLE)
+    message(WARNING "Optional dependency not found: Source/abseil-cpp. Skipping OptiMapBenchmarks target.")
 endif()
 
 enable_testing()
