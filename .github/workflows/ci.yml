@@ -87,3 +87,17 @@ jobs:
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: false
+
+  pr-merge-gate:
+    name: PR Merge Gate
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - name: Verify all CI checks passed
+      run: |
+        if [ "${{ needs.build.result }}" != "success" ]; then
+          echo "Build matrix did not fully pass: ${{ needs.build.result }}"
+          exit 1
+        fi
+        echo "All CI checks passed. PR is merge-ready."
