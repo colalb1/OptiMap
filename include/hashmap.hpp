@@ -7,6 +7,7 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <new>
 #include <optional>
 #include <stdexcept>
 #include <vector>
@@ -392,6 +393,7 @@ namespace optimap
                             const int8_t hash2_val = h2(full_hash);
 
                             new (&m_buckets[empty_index]) Entry(std::move(old_buckets[i]));
+                            old_buckets[i].~Entry();
                             m_ctrl[empty_index] = hash2_val;
 
                             size_t sentinel_index = empty_index + m_capacity;
@@ -440,6 +442,11 @@ namespace optimap
         size_t m_size = 0;
         size_t m_capacity = 0;
 
+        static constexpr size_t align_up(size_t value, size_t alignment)
+        {
+            return ((value + alignment - 1) / alignment) * alignment;
+        }
+
         void allocate_and_initialize(size_t new_capacity)
         {
             if (new_capacity == 0)
@@ -447,22 +454,25 @@ namespace optimap
                 return;
             }
 
-            size_t ctrl_bytes = new_capacity + kGroupWidth;
-            size_t buckets_bytes = new_capacity * sizeof(Entry);
-            size_t group_mask_bytes = (new_capacity / kGroupWidth + 63) / 64 * sizeof(uint64_t);
+            const size_t ctrl_bytes = new_capacity + kGroupWidth;
+            const size_t buckets_offset = align_up(ctrl_bytes, alignof(Entry));
+            const size_t buckets_bytes = new_capacity * sizeof(Entry);
+            const size_t group_mask_offset =
+                    align_up(buckets_offset + buckets_bytes, alignof(uint64_t));
+            const size_t group_words = (new_capacity / kGroupWidth + 63) / 64;
+            const size_t group_mask_bytes = group_words * sizeof(uint64_t);
 
-            size_t total_bytes = ctrl_bytes + buckets_bytes + group_mask_bytes;
+            const size_t total_bytes = group_mask_offset + group_mask_bytes;
 
             void* allocation = AlignedAllocator<char, kCacheLineSize>().allocate(total_bytes);
 
             m_ctrl = static_cast<int8_t*>(allocation);
-            m_buckets = reinterpret_cast<Entry*>(static_cast<char*>(allocation) + ctrl_bytes);
-            m_group_mask = reinterpret_cast<uint64_t*>(
-                    static_cast<char*>(allocation) + ctrl_bytes + buckets_bytes
-            );
+            m_buckets = reinterpret_cast<Entry*>(static_cast<char*>(allocation) + buckets_offset);
+            m_group_mask =
+                    reinterpret_cast<uint64_t*>(static_cast<char*>(allocation) + group_mask_offset);
 
             std::fill(m_ctrl, m_ctrl + ctrl_bytes, kEmpty);
-            std::fill(m_group_mask, m_group_mask + (new_capacity / kGroupWidth + 63) / 64, 0);
+            std::fill(m_group_mask, m_group_mask + group_words, 0);
 
             m_capacity = new_capacity;
         }
@@ -605,7 +615,7 @@ namespace optimap
             const int8_t hash2_val = h2(full_hash);
 
             // Create a new Entry with the key and value
-            m_buckets[result.index] = {std::forward<K>(key), std::forward<V>(value)};
+            new (&m_buckets[result.index]) Entry{std::forward<K>(key), std::forward<V>(value)};
 
             // Update control bytes
             m_ctrl[result.index] = hash2_val;
@@ -733,6 +743,7 @@ namespace optimap
 
             if (result.found) [[likely]]
             {
+                m_buckets[result.index].~Entry();
                 m_ctrl[result.index] = kDeleted;
 
                 // Update sentinel if within bounds
@@ -803,9 +814,9 @@ namespace optimap
 
         void clear()
         {
+            const size_t old_capacity = m_capacity;
             destroy_and_deallocate();
-            allocate_and_initialize(m_capacity);
-            m_size = 0;
+            allocate_and_initialize(old_capacity);
         }
 
         iterator begin()
@@ -894,7 +905,7 @@ namespace optimap
             // Key not found, insert new element at returned slot
             const int8_t hash2_val = h2(full_hash);
 
-            m_buckets[result.index] = {key, Value{}};
+            new (&m_buckets[result.index]) Entry{key, Value{}};
             m_ctrl[result.index] = hash2_val;
 
             // Update sentinel
@@ -930,7 +941,7 @@ namespace optimap
             // Key not found, insert a new element at the returned slot
             const int8_t hash2_val = h2(full_hash);
 
-            m_buckets[result.index] = {std::move(key), Value{}};
+            new (&m_buckets[result.index]) Entry{std::move(key), Value{}};
             m_ctrl[result.index] = hash2_val;
 
             // Update sentinel
