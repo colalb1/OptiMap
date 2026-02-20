@@ -1,7 +1,6 @@
-cmake_minimum_required(VERSION 4.0)
+cmake_minimum_required(VERSION 3.25)
 project(OptiMap LANGUAGES CXX)
 
-# Require C++23
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -13,21 +12,17 @@ else()
     set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
 endif()
 
-# Include FetchContent for dependency management
 include(FetchContent)
 
-# Fetch Google Benchmark
 FetchContent_Declare(
   benchmark
   GIT_REPOSITORY https://github.com/google/benchmark.git
   GIT_TAG v1.8.2
 )
-# Disable tests and examples for Google Benchmark
 set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
 set(BENCHMARK_ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(benchmark)
 
-# Fetch GoogleTest
 FetchContent_Declare(
   googletest
   GIT_REPOSITORY https://github.com/google/googletest.git
@@ -40,32 +35,38 @@ FetchContent_MakeAvailable(googletest)
 message(STATUS "GoogleTest Source Dir: ${googletest_SOURCE_DIR}")
 message(STATUS "GoogleTest Binary Dir: ${googletest_BINARY_DIR}")
 
-
 # Create benchmarks exe
 add_executable(OptiMapBenchmarks
     benchmarks/hashmap_benchmark.cpp
     benchmarks/accidentally_quadratic_benchmark.cpp
 )
 
-# Add abseil-cpp subdirectory
-add_subdirectory(Source/abseil-cpp)
-
-# Link Google Benchmark to benchmarks
-target_link_libraries(OptiMapBenchmarks 
-    benchmark::benchmark 
-    benchmark::benchmark_main
-    absl::flat_hash_map
-    absl::raw_hash_set
-)
+# Add optional abseil-cpp subdirectory when available
+set(ABSEIL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source/abseil-cpp")
+if(EXISTS "${ABSEIL_DIR}/CMakeLists.txt")
+    add_subdirectory("${ABSEIL_DIR}")
+    target_link_libraries(OptiMapBenchmarks
+        benchmark::benchmark
+        benchmark::benchmark_main
+        absl::flat_hash_map
+        absl::raw_hash_set
+    )
+    target_include_directories(OptiMapBenchmarks PRIVATE include "${ABSEIL_DIR}")
+else()
+    message(WARNING "Optional dependency not found: Source/abseil-cpp. Building benchmarks without Abseil links.")
+    target_link_libraries(OptiMapBenchmarks
+        benchmark::benchmark
+        benchmark::benchmark_main
+    )
+    target_include_directories(OptiMapBenchmarks PRIVATE include)
+endif()
 
 if(MSVC)
     target_link_options(OptiMapBenchmarks PRIVATE /SUBSYSTEM:CONSOLE)
 endif()
 
-# Enable testing
 enable_testing()
 
-# Create test executable
 add_executable(OptiMapTests
     tests/sample_test.cpp
     tests/test_hashmap.cpp
@@ -73,7 +74,6 @@ add_executable(OptiMapTests
     tests/test_contains.cpp
 )
 
-# Link GoogleTest to tests
 target_link_libraries(OptiMapTests
     gtest
     gtest_main
@@ -83,7 +83,6 @@ target_include_directories(OptiMapTests PRIVATE
     include
 )
 
-# Add test to CTest
 add_test(NAME OptiMapTests COMMAND OptiMapTests)
 
 # Coverage configuration
@@ -94,15 +93,13 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     endforeach()
 endif()
 
-target_include_directories(OptiMapBenchmarks PRIVATE include Source/abseil-cpp)
 target_include_directories(OptiMapTests PRIVATE include)
 
-# Clang-format
 find_program(CLANG_FORMAT_EXE NAMES clang-format)
 if(CLANG_FORMAT_EXE)
-    file(GLOB_RECURSE ALL_CXX_SOURCE_FILES 
+    file(GLOB_RECURSE ALL_CXX_SOURCE_FILES
         demo.cpp
-        include/*.hpp 
+        include/*.hpp
         benchmarks/*.cpp
         tests/*.cpp
     )
@@ -114,20 +111,4 @@ if(CLANG_FORMAT_EXE)
     )
 endif()
 
-# Clang-tidy
 set(CMAKE_CXX_CLANG_TIDY "clang-tidy;-checks=*")
-
-# # Doc generation
-# find_package(Doxygen REQUIRED)
-
-# if(DOXYGEN_FOUND)
-#     set(DOXYGEN_IN ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile)
-#     set(DOXYGEN_OUT ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile.out)
-
-#     add_custom_target(doc
-#         COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYGEN_IN}
-#         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-#         COMMENT "Generating API documentation with Doxygen"
-#         VERBATIM
-#     )
-# endif()
