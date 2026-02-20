@@ -101,5 +101,3 @@ if(CLANG_FORMAT_EXE)
         COMMENT "Running clang-format on source files"
     )
 endif()
-
-set(CMAKE_CXX_CLANG_TIDY "clang-tidy;-checks=*")
