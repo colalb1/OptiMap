@@ -17,13 +17,9 @@
 #include <variant>
 #include <vector>
 
-#if defined(_MSC_VER)
-#include <intrin.h>
-#endif
-
 // Platform-specific intrinsics
-#if (defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86))
-#if defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER)
+#if (defined(__x86_64__) || defined(__i386))
+#if defined(__GNUC__) || defined(__clang__)
 #include <emmintrin.h>  // SSE2
 #include <immintrin.h>  // AES-NI and SSE intrinsics
 #include <smmintrin.h>
@@ -69,7 +65,7 @@ static inline uint64_t mix64(uint64_t a, uint64_t b) noexcept {
 
 // Runtime AES detection (x86)
 static inline bool cpu_supports_aes() noexcept {
-#if (defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86))
+#if (defined(__x86_64__) || defined(__i386))
 #if defined(__GNUC__) || defined(__clang__)
 #if defined(__has_builtin)
 #if __has_builtin(__builtin_cpu_supports)
@@ -80,10 +76,6 @@ static inline bool cpu_supports_aes() noexcept {
 #else
     return __builtin_cpu_supports("aes");
 #endif
-#elif defined(_MSC_VER)
-    int info[4] = {0, 0, 0, 0};
-    __cpuid(info, 1);
-    return (info[2] & (1 << 25)) != 0;
 #else
     return false;
 #endif

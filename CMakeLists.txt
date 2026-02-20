@@ -5,12 +5,8 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Set release build flags
-if(MSVC)
-    set(CMAKE_CXX_FLAGS_RELEASE "/O2 /DNDEBUG")
-else()
-    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
-endif()
+# Set release build flags (Linux/macOS only)
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
 
 include(FetchContent)
 
@@ -51,9 +47,6 @@ if(EXISTS "${ABSEIL_DIR}/CMakeLists.txt")
         absl::raw_hash_set
     )
     target_include_directories(OptiMapBenchmarks PRIVATE include "${ABSEIL_DIR}")
-    if(MSVC)
-        target_link_options(OptiMapBenchmarks PRIVATE /SUBSYSTEM:CONSOLE)
-    endif()
 else()
     message(WARNING "Optional dependency not found: Source/abseil-cpp. Skipping OptiMapBenchmarks target.")
 endif()
@@ -75,6 +68,11 @@ target_link_libraries(OptiMapTests
 target_include_directories(OptiMapTests PRIVATE
     include
 )
+
+# gxhash uses AES intrinsics on x86; GCC/Clang need explicit target flags.
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|i[3-6]86)$")
+    target_compile_options(OptiMapTests PRIVATE -maes -msse4.1)
+endif()
 
 add_test(NAME OptiMapTests COMMAND OptiMapTests)
 
