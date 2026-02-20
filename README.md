@@ -23,6 +23,21 @@ cmake ..
 make
 ```
 
+## Pre-commit Hooks
+
+Install `pre-commit` and enable hooks:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+Run the hooks on all files:
+
+```bash
+pre-commit run --all-files
+```
+
 ### Run Tests
 
 `Main Build` then...

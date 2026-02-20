@@ -1,12 +1,12 @@
-#include <benchmark/benchmark.h>
+#include "hashmap.hpp"
 
+#include <benchmark/benchmark.h>
 #include <cstdint>
 #include <random>
 #include <vector>
 
-#include "hashmap.hpp"
-
-BENCHMARK(IterateIntegers) {
+BENCHMARK(IterateIntegers)
+{
     sfc64 rng(123);
 
     size_t const num_iters = 50000;
@@ -23,9 +23,11 @@ BENCHMARK(IterateIntegers) {
 
     auto const state = rng.state();
     bench.beginMeasure("iterate while adding");
-    for (size_t n = 0; n < num_iters; ++n) {
+    for (size_t n = 0; n < num_iters; ++n)
+    {
         map[rng()] = n;
-        for (auto const& keyVal : map) {
+        for (auto const& keyVal : map)
+        {
             result += keyVal.second;
         }
     }
@@ -33,9 +35,11 @@ BENCHMARK(IterateIntegers) {
 
     rng.state(state);
     bench.beginMeasure("iterate while removing");
-    for (size_t n = 0; n < num_iters; ++n) {
+    for (size_t n = 0; n < num_iters; ++n)
+    {
         map.erase(rng());
-        for (auto const& keyVal : map) {
+        for (auto const& keyVal : map)
+        {
             result += keyVal.second;
         }
     }

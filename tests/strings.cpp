@@ -1,10 +1,9 @@
-#include <benchmark/benchmark.h>
+#include "hashmap.hpp"
 
+#include <benchmark/benchmark.h>
 #include <cstdint>
 #include <random>
 #include <vector>
-
-#include "hashmap.hpp"
 
 #if 0
 #include <string>

@@ -5,12 +5,8 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Set release build flags
-if(MSVC)
-    set(CMAKE_CXX_FLAGS_RELEASE "/O2 /DNDEBUG")
-else()
-    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
-endif()
+# Set release build flags (Linux/macOS only)
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
 
 include(FetchContent)
 
@@ -35,15 +31,14 @@ FetchContent_MakeAvailable(googletest)
 message(STATUS "GoogleTest Source Dir: ${googletest_SOURCE_DIR}")
 message(STATUS "GoogleTest Binary Dir: ${googletest_BINARY_DIR}")
 
-# Create benchmarks exe
-add_executable(OptiMapBenchmarks
-    benchmarks/hashmap_benchmark.cpp
-    benchmarks/accidentally_quadratic_benchmark.cpp
-)
-
 # Add optional abseil-cpp subdirectory when available
 set(ABSEIL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source/abseil-cpp")
 if(EXISTS "${ABSEIL_DIR}/CMakeLists.txt")
+    # Benchmarks currently depend on Abseil headers in source files.
+    add_executable(OptiMapBenchmarks
+        benchmarks/hashmap_benchmark.cpp
+        benchmarks/accidentally_quadratic_benchmark.cpp
+    )
     add_subdirectory("${ABSEIL_DIR}")
     target_link_libraries(OptiMapBenchmarks
         benchmark::benchmark
@@ -53,16 +48,7 @@ if(EXISTS "${ABSEIL_DIR}/CMakeLists.txt")
     )
     target_include_directories(OptiMapBenchmarks PRIVATE include "${ABSEIL_DIR}")
 else()
-    message(WARNING "Optional dependency not found: Source/abseil-cpp. Building benchmarks without Abseil links.")
-    target_link_libraries(OptiMapBenchmarks
-        benchmark::benchmark
-        benchmark::benchmark_main
-    )
-    target_include_directories(OptiMapBenchmarks PRIVATE include)
-endif()
-
-if(MSVC)
-    target_link_options(OptiMapBenchmarks PRIVATE /SUBSYSTEM:CONSOLE)
+    message(WARNING "Optional dependency not found: Source/abseil-cpp. Skipping OptiMapBenchmarks target.")
 endif()
 
 enable_testing()
@@ -82,6 +68,11 @@ target_link_libraries(OptiMapTests
 target_include_directories(OptiMapTests PRIVATE
     include
 )
+
+# gxhash uses AES intrinsics on x86; GCC/Clang need explicit target flags.
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|i[3-6]86)$")
+    target_compile_options(OptiMapTests PRIVATE -maes -msse4.1)
+endif()
 
 add_test(NAME OptiMapTests COMMAND OptiMapTests)
 
@@ -110,5 +101,3 @@ if(CLANG_FORMAT_EXE)
         COMMENT "Running clang-format on source files"
     )
 endif()
-
-set(CMAKE_CXX_CLANG_TIDY "clang-tidy;-checks=*")

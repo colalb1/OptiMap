@@ -1,10 +1,11 @@
 #include <gtest/gtest.h>
 
 // Sample test to verify GoogleTest is working
-TEST(SampleTest, BasicAssertions) {
+TEST(SampleTest, BasicAssertions)
+{
     // Expect two strings not to be equal
     EXPECT_STRNE("hello", "world");
-    
+
     // Expect equality
     EXPECT_EQ(7 * 6, 42);
 }
